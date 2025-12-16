@@ -18,13 +18,15 @@ jobs:
           channel: stable
 
       - name: Install dependencies
+        working-directory: medicopilot
         run: flutter pub get
 
       - name: Build Windows app
+        working-directory: medicopilot
         run: flutter build windows --release
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
           name: medicopilot-windows
-          path: build/windows/runner/Release/
+          path: medicopilot/build/windows/runner/Release/
