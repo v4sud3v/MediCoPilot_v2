@@ -18,7 +18,7 @@ class Sidebar extends StatelessWidget {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withAlpha(25),
             spreadRadius: 1,
             blurRadius: 5,
             offset: const Offset(2, 0),
@@ -44,10 +44,7 @@ class Sidebar extends StatelessWidget {
                 SizedBox(height: 4),
                 Text(
                   "Dr. Smith's Practice",
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ],
             ),
@@ -61,6 +58,15 @@ class Sidebar extends StatelessWidget {
             label: 'New Encounter',
             index: 0,
             isSelected: selectedIndex == 0,
+          ),
+          const SizedBox(height: 8),
+          // All Encounters Button
+          _buildNavItem(
+            context,
+            icon: Icons.list_alt,
+            label: 'All Encounters',
+            index: 1,
+            isSelected: selectedIndex == 1,
           ),
           const Spacer(),
           // User info at bottom
@@ -94,10 +100,7 @@ class Sidebar extends StatelessWidget {
                       ),
                       Text(
                         'doctor@clinic.com',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                     ],
                   ),
