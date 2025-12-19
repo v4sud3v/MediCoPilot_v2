@@ -13,6 +13,7 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
   final _complaintController = TextEditingController();
   final _historyController = TextEditingController();
   final _examinationController = TextEditingController();
+  final _diagnosisController = TextEditingController();
 
   // Vital signs controllers
   final _temperatureController = TextEditingController();
@@ -23,12 +24,29 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
   final _weightController = TextEditingController();
   final _heightController = TextEditingController();
 
+  // Analysis state
+  bool _isAnalyzing = false;
+  bool _hasAnalyzed = false;
+  Map<String, dynamic>? _analysisResults;
+  bool _hasDiagnosisText = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _diagnosisController.addListener(() {
+      setState(() {
+        _hasDiagnosisText = _diagnosisController.text.trim().isNotEmpty;
+      });
+    });
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
     _complaintController.dispose();
     _historyController.dispose();
     _examinationController.dispose();
+    _diagnosisController.dispose();
     _temperatureController.dispose();
     _bloodPressureController.dispose();
     _heartRateController.dispose();
@@ -269,6 +287,64 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
                             ),
                             const SizedBox(height: 24),
 
+                            // Initial Diagnosis
+                            _buildTextField(
+                              controller: _diagnosisController,
+                              label: 'Initial Diagnosis',
+                              hint:
+                                  'Enter your initial diagnosis based on the examination and findings',
+                              icon: Icons.medical_information_outlined,
+                              maxLines: 3,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please enter your initial diagnosis';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Analyze Button
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: _hasDiagnosisText && !_isAnalyzing
+                                    ? _analyzeDiagnosis
+                                    : null,
+                                icon: _isAnalyzing
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Color(0xFF059669),
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.analytics_outlined,
+                                        size: 18,
+                                      ),
+                                label: Text(
+                                  _isAnalyzing
+                                      ? 'Analyzing...'
+                                      : 'Analyze Diagnosis with AI',
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF059669),
+                                  side: const BorderSide(
+                                    color: Color(0xFF059669),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                  disabledForegroundColor: Colors.grey.shade400,
+                                  disabledBackgroundColor: Colors.grey.shade50,
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 24),
+
                             // Submit Button
                             SizedBox(
                               width: double.infinity,
@@ -346,9 +422,9 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Text(
-                  'Suggestions',
-                  style: TextStyle(
+                Text(
+                  _hasAnalyzed ? 'AI Analysis Results' : 'AI Suggestions',
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF1E293B),
@@ -359,173 +435,44 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
           ),
           // Suggestions Content
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildSuggestionCard(
-                    title: 'Differential Diagnosis',
-                    icon: Icons.medical_information_outlined,
-                    suggestions: [
-                      'Viral upper respiratory infection',
-                      'Acute bronchitis',
-                      'Allergic rhinitis',
-                      'COVID-19',
-                    ],
-                    color: const Color(0xFF2563EB),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildSuggestionCard(
-                    title: 'Recommended Tests',
-                    icon: Icons.science_outlined,
-                    suggestions: [
-                      'Complete blood count (CBC)',
-                      'Chest X-ray',
-                      'COVID-19 PCR test',
-                      'Throat culture',
-                    ],
-                    color: const Color(0xFF059669),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildSuggestionCard(
-                    title: 'Treatment Options',
-                    icon: Icons.medication_outlined,
-                    suggestions: [
-                      'Symptomatic relief (NSAIDs)',
-                      'Rest and hydration',
-                      'Antihistamines if allergic',
-                      'Follow-up in 3-5 days',
-                    ],
-                    color: const Color(0xFFDC2626),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildSuggestionCard(
-                    title: 'Documentation Tips',
-                    icon: Icons.description_outlined,
-                    suggestions: [
-                      'Include duration of symptoms',
-                      'Document vital signs',
-                      'Note any red flag symptoms',
-                      'Record medication allergies',
-                    ],
-                    color: const Color(0xFFD97706),
-                  ),
-                  const SizedBox(height: 20),
-                  // AI Status
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF0F9FF),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: const Color(0xFF2563EB).withAlpha(51),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.info_outline,
-                          size: 16,
-                          color: Color(0xFF2563EB),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'AI suggestions update in real-time based on your input',
+            child: _hasAnalyzed && _analysisResults != null
+                ? SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: _buildAnalysisResultsContent(),
+                  )
+                : Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(40),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.analytics_outlined,
+                            size: 64,
+                            color: Colors.grey.shade300,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No Analysis Yet',
                             style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade700,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade600,
                             ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 8),
+                          Text(
+                            'Enter your initial diagnosis and click "Analyze" to get AI-powered suggestions',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade500,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSuggestionCard({
-    required String title,
-    required IconData icon,
-    required List<String> suggestions,
-    required Color color,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Card Header
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: color.withAlpha(13),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(12),
-                topRight: Radius.circular(12),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(icon, size: 18, color: color),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: color,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Suggestions List
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              children: suggestions.map((suggestion) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        margin: const EdgeInsets.only(top: 6),
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: color,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          suggestion,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF374151),
-                            height: 1.5,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
           ),
         ],
       ),
@@ -537,6 +484,7 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
     required String label,
     required String hint,
     required IconData icon,
+    String? Function(String?)? validator,
     int maxLines = 1,
   }) {
     return Column(
@@ -554,6 +502,7 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
         TextFormField(
           controller: controller,
           maxLines: maxLines,
+          validator: validator,
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
@@ -599,5 +548,246 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
         ),
       );
     }
+  }
+
+  Future<void> _analyzeDiagnosis() async {
+    setState(() {
+      _isAnalyzing = true;
+    });
+
+    // Simulate API call - replace with actual API call
+    await Future.delayed(const Duration(seconds: 2));
+
+    // Mock analysis results - replace with actual API response
+    setState(() {
+      _analysisResults = {
+        'missedDiagnoses': [
+          {
+            'title': 'Pneumonia',
+            'description':
+                'Consider bacterial or viral pneumonia as a complication',
+            'confidence': 'Medium',
+          },
+          {
+            'title': 'Tuberculosis',
+            'description':
+                'Rule out TB especially if persistent cough > 3 weeks',
+            'confidence': 'Low',
+          },
+          {
+            'title': 'Asthma exacerbation',
+            'description': 'Consider if patient has history of asthma',
+            'confidence': 'Medium',
+          },
+        ],
+        'potentialIssues': [
+          {
+            'title': 'Antibiotic resistance',
+            'description':
+                'Consider recent antibiotic use and local resistance patterns',
+            'severity': 'High',
+          },
+          {
+            'title': 'Dehydration risk',
+            'description':
+                'Monitor fluid intake, especially with persistent fever',
+            'severity': 'Medium',
+          },
+        ],
+        'recommendedTests': [
+          {
+            'title': 'Chest X-ray',
+            'description': 'To rule out pneumonia and assess lung condition',
+            'priority': 'High',
+          },
+          {
+            'title': 'Complete Blood Count (CBC)',
+            'description':
+                'Check for infection markers and overall health status',
+            'priority': 'High',
+          },
+          {
+            'title': 'Sputum culture',
+            'description': 'Identify specific bacterial pathogens if present',
+            'priority': 'Medium',
+          },
+          {
+            'title': 'COVID-19 PCR test',
+            'description': 'Rule out COVID-19 infection',
+            'priority': 'Medium',
+          },
+        ],
+      };
+      _isAnalyzing = false;
+      _hasAnalyzed = true;
+    });
+  }
+
+  void _addToDiagnosis(String text) {
+    setState(() {
+      final currentDiagnosis = _diagnosisController.text;
+      if (currentDiagnosis.isEmpty) {
+        _diagnosisController.text = text;
+      } else {
+        _diagnosisController.text = '$currentDiagnosis\n• $text';
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Added to diagnosis: $text'),
+        backgroundColor: const Color(0xFF059669),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Widget _buildAnalysisResultsContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Missed Diagnoses
+        if (_analysisResults!['missedDiagnoses'] != null) ...[
+          const Text(
+            'Potential Missed Diagnoses',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF374151),
+            ),
+          ),
+          const SizedBox(height: 12),
+          ..._buildSuggestionsList(
+            _analysisResults!['missedDiagnoses'],
+            Colors.orange,
+          ),
+          const SizedBox(height: 20),
+        ],
+
+        // Potential Issues
+        if (_analysisResults!['potentialIssues'] != null) ...[
+          const Text(
+            'Potential Issues',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF374151),
+            ),
+          ),
+          const SizedBox(height: 12),
+          ..._buildSuggestionsList(
+            _analysisResults!['potentialIssues'],
+            Colors.red,
+          ),
+          const SizedBox(height: 20),
+        ],
+
+        // Recommended Tests
+        if (_analysisResults!['recommendedTests'] != null) ...[
+          const Text(
+            'Recommended Tests',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF374151),
+            ),
+          ),
+          const SizedBox(height: 12),
+          ..._buildSuggestionsList(
+            _analysisResults!['recommendedTests'],
+            Colors.blue,
+          ),
+        ],
+      ],
+    );
+  }
+
+  List<Widget> _buildSuggestionsList(List<dynamic> suggestions, Color color) {
+    return suggestions.map<Widget>((suggestion) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withAlpha(13),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withAlpha(51)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: color.withAlpha(25),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(Icons.lightbulb_outline, color: color, size: 16),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    suggestion['title'] ?? '',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    suggestion['description'] ?? '',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                  ),
+                  if (suggestion['confidence'] != null ||
+                      suggestion['severity'] != null ||
+                      suggestion['priority'] != null) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: color.withAlpha(25),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        suggestion['confidence'] ??
+                            suggestion['severity'] ??
+                            suggestion['priority'] ??
+                            '',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: color,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: () => _addToDiagnosis(suggestion['title']),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF059669),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('Add', style: TextStyle(fontSize: 12)),
+            ),
+          ],
+        ),
+      );
+    }).toList();
   }
 }

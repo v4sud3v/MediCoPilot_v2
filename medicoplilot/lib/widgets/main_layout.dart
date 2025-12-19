@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'sidebar.dart';
 import '../pages/new_encounter_page.dart';
 import '../pages/all_encounters_page.dart';
+import '../pages/patient_education_page.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
@@ -33,6 +34,7 @@ class _MainLayoutState extends State<MainLayout> {
   final List<Widget> _pages = [
     const NewEncounterPage(),
     const AllEncountersPage(),
+    const PatientEducationPage(),
     // Add more pages here as you create them
   ];
 

@@ -68,6 +68,15 @@ class Sidebar extends StatelessWidget {
             index: 1,
             isSelected: selectedIndex == 1,
           ),
+          const SizedBox(height: 8),
+          // Patient Education Button
+          _buildNavItem(
+            context,
+            icon: Icons.school_outlined,
+            label: 'Patient Education',
+            index: 2,
+            isSelected: selectedIndex == 2,
+          ),
           const Spacer(),
           // User info at bottom
           Container(

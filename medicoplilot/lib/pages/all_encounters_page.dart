@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:medicoplilot/pages/encounter_details_page.dart';
 import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:path_provider/path_provider.dart';
@@ -100,7 +101,7 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
     return filtered;
   }
 
-  void _uploadFile(String encounterId) async {
+  Future<Map<String, String>?> _uploadFile(String encounterId) async {
     String selectedType = 'Lab Report';
     String? selectedFilePath;
     String? selectedFileName;
@@ -115,10 +116,10 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
       selectedFilePath = result.files.single.path;
       selectedFileName = result.files.single.name;
 
-      if (!mounted) return;
+      if (!mounted) return null;
 
-      // Show dialog to select document type
-      showDialog(
+      // Show dialog to select document type and wait for result
+      final uploadedFile = await showDialog<Map<String, String>?>(
         context: context,
         builder: (context) => StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
@@ -219,7 +220,7 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(context, null),
                 child: const Text('Cancel'),
               ),
               ElevatedButton.icon(
@@ -242,29 +243,18 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
                     // Copy file to app directory
                     await File(selectedFilePath!).copy(newFilePath);
 
-                    setState(() {
-                      if (!_encounterFiles.containsKey(encounterId)) {
-                        _encounterFiles[encounterId] = [];
-                      }
-                      _encounterFiles[encounterId]!.add({
-                        'name': ?selectedFileName,
-                        'type': selectedType,
-                        'path': newFilePath,
-                        'uploadDate': DateTime.now().toString(),
-                      });
-                    });
+                    final newFile = {
+                      'name': selectedFileName!,
+                      'type': selectedType,
+                      'path': newFilePath,
+                      'uploadDate': DateTime.now().toString(),
+                    };
 
                     if (!context.mounted) return;
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('$selectedType uploaded successfully'),
-                        backgroundColor: const Color(0xFF059669),
-                      ),
-                    );
+                    Navigator.pop(context, newFile);
                   } catch (e) {
                     if (!context.mounted) return;
-                    Navigator.pop(context);
+                    Navigator.pop(context, null);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('Error uploading file: $e'),
@@ -274,7 +264,7 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
                   }
                 },
                 icon: const Icon(Icons.upload),
-                label: const Text('Choose File'),
+                label: const Text('Upload'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF2563EB),
                   foregroundColor: Colors.white,
@@ -284,7 +274,29 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
           ),
         ),
       );
+
+      if (uploadedFile != null) {
+        // Update parent state
+        setState(() {
+          if (!_encounterFiles.containsKey(encounterId)) {
+            _encounterFiles[encounterId] = [];
+          }
+          _encounterFiles[encounterId]!.add(uploadedFile);
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${uploadedFile['type']} uploaded successfully'),
+              backgroundColor: const Color(0xFF059669),
+            ),
+          );
+        }
+
+        return uploadedFile;
+      }
     }
+    return null;
   }
 
   void _viewFile(Map<String, String> file) async {
@@ -398,17 +410,17 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
     );
   }
 
-  void _deleteFile(String encounterId, int fileIndex) async {
+  Future<bool> _deleteFile(String encounterId, int fileIndex) async {
     final file = _encounterFiles[encounterId]?[fileIndex];
 
-    showDialog(
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Document'),
         content: const Text('Are you sure you want to delete this document?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
@@ -425,18 +437,8 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
                 }
               }
 
-              setState(() {
-                _encounterFiles[encounterId]?.removeAt(fileIndex);
-              });
-
               if (!context.mounted) return;
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Document deleted'),
-                  backgroundColor: Color(0xFFDC2626),
-                ),
-              );
+              Navigator.pop(context, true);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFDC2626),
@@ -447,14 +449,32 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
         ],
       ),
     );
+
+    if (confirmed == true) {
+      // Update parent state
+      setState(() {
+        _encounterFiles[encounterId]?.removeAt(fileIndex);
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Document deleted'),
+            backgroundColor: Color(0xFFDC2626),
+          ),
+        );
+      }
+      return true;
+    }
+    return false;
   }
 
   void _showEncounterDetails(Map<String, dynamic> encounter) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => _EncounterDetailPage(
+        builder: (context) => EncounterDetailPage(
           encounter: encounter,
-          encounterFiles: _encounterFiles[encounter['id']] ?? [],
+          initialEncounterFiles: _encounterFiles[encounter['id']] ?? [],
           onUploadFile: () => _uploadFile(encounter['id']),
           onDeleteFile: (index) => _deleteFile(encounter['id'], index),
           onViewFile: (file) => _viewFile(file),
@@ -829,604 +849,6 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// Full-page Encounter Detail View
-class _EncounterDetailPage extends StatelessWidget {
-  final Map<String, dynamic> encounter;
-  final List<Map<String, String>> encounterFiles;
-  final VoidCallback onUploadFile;
-  final Function(int) onDeleteFile;
-  final Function(Map<String, String>) onViewFile;
-
-  const _EncounterDetailPage({
-    required this.encounter,
-    required this.encounterFiles,
-    required this.onUploadFile,
-    required this.onDeleteFile,
-    required this.onViewFile,
-  });
-
-  String _formatDateTime(DateTime date) {
-    return '${date.day}/${date.month}/${date.year} at ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: Column(
-        children: [
-          // Custom App Bar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withAlpha(25),
-                  spreadRadius: 1,
-                  blurRadius: 5,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () => Navigator.pop(context),
-                  tooltip: 'Back to encounters',
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2563EB).withAlpha(25),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.description,
-                    color: Color(0xFF2563EB),
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Encounter #${encounter['id']}',
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF059669).withAlpha(25),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text(
-                              'Completed',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: Color(0xFF059669),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Icon(
-                            Icons.access_time,
-                            size: 14,
-                            color: Colors.grey.shade600,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _formatDateTime(encounter['date']),
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Content
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Left Column - Main Info
-                  Expanded(
-                    flex: 2,
-                    child: Column(
-                      children: [
-                        _buildInfoCard(
-                          'Patient Information',
-                          Icons.person_outline,
-                          const Color(0xFF2563EB),
-                          [
-                            _buildInfoRow('Patient Name', encounter['patient']),
-                            _buildInfoRow(
-                              'Date & Time',
-                              _formatDateTime(encounter['date']),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        _buildInfoCard(
-                          'Chief Complaint',
-                          Icons.healing_outlined,
-                          const Color(0xFFDC2626),
-                          [
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8),
-                              child: Text(
-                                encounter['complaint'],
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  height: 1.6,
-                                  color: Color(0xFF1E293B),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        _buildInfoCard(
-                          'Diagnosis & Treatment',
-                          Icons.medical_information_outlined,
-                          const Color(0xFF059669),
-                          [
-                            _buildInfoRow('Diagnosis', encounter['diagnosis']),
-                            const SizedBox(height: 12),
-                            _buildInfoRow(
-                              'Treatment Plan',
-                              encounter['treatment'],
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 24),
-                  // Right Column - Vitals & Documents
-                  Expanded(
-                    flex: 1,
-                    child: Column(
-                      children: [
-                        _buildVitalsCard(),
-                        const SizedBox(height: 20),
-                        _buildDocumentsCard(context),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoCard(
-    String title,
-    IconData icon,
-    Color accentColor,
-    List<Widget> children,
-  ) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withAlpha(25),
-            spreadRadius: 1,
-            blurRadius: 5,
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: accentColor.withAlpha(25),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: accentColor, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E293B),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          ...children,
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 140,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade700,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 14, color: Color(0xFF1E293B)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVitalsCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withAlpha(25),
-            spreadRadius: 1,
-            blurRadius: 5,
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD97706).withAlpha(25),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.monitor_heart_outlined,
-                  color: Color(0xFFD97706),
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'Vital Signs',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E293B),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _buildVitalItem(
-            Icons.thermostat_outlined,
-            'Temperature',
-            '${encounter['temperature']}°F',
-            const Color(0xFFDC2626),
-          ),
-          const SizedBox(height: 16),
-          _buildVitalItem(
-            Icons.favorite_outline,
-            'Blood Pressure',
-            '${encounter['bloodPressure']} mmHg',
-            const Color(0xFF2563EB),
-          ),
-          const SizedBox(height: 16),
-          _buildVitalItem(
-            Icons.monitor_heart_outlined,
-            'Heart Rate',
-            '${encounter['heartRate']} bpm',
-            const Color(0xFFDC2626),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVitalItem(
-    IconData icon,
-    String label,
-    String value,
-    Color color,
-  ) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: color.withAlpha(25),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, size: 18, color: color),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1E293B),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDocumentsCard(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withAlpha(25),
-            spreadRadius: 1,
-            blurRadius: 5,
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF7C3AED).withAlpha(25),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.folder_outlined,
-                  color: Color(0xFF7C3AED),
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Documents',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: onUploadFile,
-              icon: const Icon(Icons.upload_file, size: 18),
-              label: const Text('Upload Document'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2563EB),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (encounterFiles.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: Center(
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.folder_open,
-                      size: 48,
-                      color: Colors.grey.shade300,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'No documents yet',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            ...encounterFiles.asMap().entries.map((entry) {
-              final index = entry.key;
-              final file = entry.value;
-              return _buildFileCard(context, index, file);
-            }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFileCard(
-    BuildContext context,
-    int index,
-    Map<String, String> file,
-  ) {
-    IconData fileIcon;
-    Color fileColor;
-
-    switch (file['type']) {
-      case 'X-Ray':
-      case 'CT Scan':
-      case 'MRI Scan':
-        fileIcon = Icons.medical_services;
-        fileColor = const Color(0xFFDC2626);
-        break;
-      case 'Lab Report':
-        fileIcon = Icons.science;
-        fileColor = const Color(0xFF059669);
-        break;
-      case 'ECG':
-        fileIcon = Icons.monitor_heart;
-        fileColor = const Color(0xFFD97706);
-        break;
-      case 'Ultrasound':
-        fileIcon = Icons.waves;
-        fileColor = const Color(0xFF7C3AED);
-        break;
-      case 'Prescription':
-        fileIcon = Icons.medication;
-        fileColor = const Color(0xFF2563EB);
-        break;
-      default:
-        fileIcon = Icons.insert_drive_file;
-        fileColor = Colors.grey;
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: fileColor.withAlpha(25),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Icon(fileIcon, size: 18, color: fileColor),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      file['name']!,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      file['type']!,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => onViewFile(file),
-                  icon: const Icon(Icons.visibility_outlined, size: 16),
-                  label: const Text('View'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF2563EB),
-                    side: const BorderSide(color: Color(0xFF2563EB)),
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton(
-                onPressed: () => onDeleteFile(index),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFDC2626),
-                  side: const BorderSide(color: Color(0xFFDC2626)),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                ),
-                child: const Icon(Icons.delete_outline, size: 16),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
