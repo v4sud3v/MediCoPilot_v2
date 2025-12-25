@@ -9,6 +9,7 @@ class EncounterDetailPage extends StatefulWidget {
   final Function(Map<String, String>) onViewFile;
 
   const EncounterDetailPage({
+    super.key,
     required this.encounter,
     required this.initialEncounterFiles,
     required this.onUploadFile,
@@ -713,10 +714,7 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
               const SizedBox(height: 8),
               Text(
                 'Type: ${file['type']}',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
               ),
               const SizedBox(height: 20),
               Container(
