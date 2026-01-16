@@ -547,20 +547,33 @@ Most muscle strains improve within 2-6 weeks with proper treatment and rest.
                   ),
                 ),
                 const SizedBox(width: 12),
-                if (isPending)
+                if (isPending) ...[
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _showEditDialog(context, education),
+                      icon: const Icon(Icons.edit, size: 18),
+                      label: const Text('Edit'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF7C3AED),
+                        side: const BorderSide(color: Color(0xFF7C3AED)),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () => _showSendDialog(context, education),
                       icon: const Icon(Icons.send, size: 18),
-                      label: const Text('Send to Patient'),
+                      label: const Text('Send'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF16A34A),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
                     ),
-                  )
-                else
+                  ),
+                ] else
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () => _showResendDialog(context, education),
@@ -611,6 +624,10 @@ Most muscle strains improve within 2-6 weeks with proper treatment and rest.
   }
 
   void _showFullContent(BuildContext context, Map<String, dynamic> education) {
+    final bool isPending = _pendingEducation.any(
+      (e) => e['id'] == education['id'],
+    );
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -651,13 +668,237 @@ Most muscle strains improve within 2-6 weeks with proper treatment and rest.
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
           ),
+          if (isPending)
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                _showEditDialog(context, education);
+              },
+              icon: const Icon(Icons.edit, size: 18),
+              label: const Text('Edit'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF7C3AED),
+                side: const BorderSide(color: Color(0xFF7C3AED)),
+              ),
+            ),
+          if (isPending)
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                _showSendDialog(context, education);
+              },
+              icon: const Icon(Icons.send, size: 18),
+              label: const Text('Send to Patient'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF16A34A),
+                foregroundColor: Colors.white,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditDialog(BuildContext context, Map<String, dynamic> education) {
+    final titleController = TextEditingController(text: education['title']);
+    final descriptionController = TextEditingController(
+      text: education['description'],
+    );
+    final contentController = TextEditingController(text: education['content']);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF7C3AED).withAlpha(25),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.edit, color: Color(0xFF7C3AED), size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text('Edit Education Material'),
+          ],
+        ),
+        content: SizedBox(
+          width: 700,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: Colors.amber.shade700,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Review and edit the AI-generated content before sending to the patient.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.amber.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Patient: ${education['patient']}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Encounter: ${education['encounter']}',
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Title',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: titleController,
+                  decoration: InputDecoration(
+                    hintText: 'Enter title',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                  ),
+                  style: const TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Description',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: descriptionController,
+                  decoration: InputDecoration(
+                    hintText: 'Enter description',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                  ),
+                  style: const TextStyle(fontSize: 14),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Content',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: contentController,
+                  decoration: InputDecoration(
+                    hintText: 'Enter content',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.all(12),
+                  ),
+                  style: const TextStyle(fontSize: 13, height: 1.6),
+                  maxLines: 15,
+                  minLines: 10,
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              titleController.dispose();
+              descriptionController.dispose();
+              contentController.dispose();
+              Navigator.pop(context);
+            },
+            child: const Text('Cancel'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () {
+              // Save changes
+              setState(() {
+                education['title'] = titleController.text;
+                education['description'] = descriptionController.text;
+                education['content'] = contentController.text;
+              });
+              titleController.dispose();
+              descriptionController.dispose();
+              contentController.dispose();
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Changes saved successfully!'),
+                  backgroundColor: Color(0xFF7C3AED),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+            icon: const Icon(Icons.save, size: 18),
+            label: const Text('Save Changes'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF7C3AED),
+              side: const BorderSide(color: Color(0xFF7C3AED)),
+            ),
+          ),
           ElevatedButton.icon(
             onPressed: () {
+              // Save and send
+              setState(() {
+                education['title'] = titleController.text;
+                education['description'] = descriptionController.text;
+                education['content'] = contentController.text;
+              });
+              titleController.dispose();
+              descriptionController.dispose();
+              contentController.dispose();
               Navigator.pop(context);
               _showSendDialog(context, education);
             },
             icon: const Icon(Icons.send, size: 18),
-            label: const Text('Send to Patient'),
+            label: const Text('Save & Send'),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF16A34A),
               foregroundColor: Colors.white,
