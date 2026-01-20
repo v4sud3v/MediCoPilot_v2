@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apis.auth import router as auth_router
 from apis.analyze_encounter import router as analysis_router
+from apis.save_encounter import router as save_encounter_router
 
 app = FastAPI(
     title="MediCoPilot API",
@@ -21,6 +22,7 @@ app.add_middleware(
 # Include routers
 app.include_router(auth_router)
 app.include_router(analysis_router)
+app.include_router(save_encounter_router)
 
 
 @app.get("/", tags=["Health"])
@@ -31,7 +33,8 @@ def root():
         "endpoints": {
             "health": "/",
             "authentication": "/auth/*",
-            "analysis": "/analysis/encounter"
+            "analysis": "/analysis/encounter",
+            "save_encounter": "/encounter/save"
         }
     }
 

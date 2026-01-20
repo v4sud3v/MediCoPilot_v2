@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional, List, Literal
+from uuid import UUID
 
 
 class VitalSigns(BaseModel):
@@ -42,3 +43,31 @@ class AnalyzeEncounterResponse(BaseModel):
     missedDiagnoses: List[MissedDiagnosis]
     potentialIssues: List[PotentialIssue]
     recommendedTests: List[RecommendedTest]
+
+
+# Save Encounter Models
+class PatientData(BaseModel):
+    name: str
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    allergies: Optional[str] = None
+    contact_info: Optional[str] = None
+
+
+class SaveEncounterRequest(BaseModel):
+    patient: PatientData
+    chief_complaint: Optional[str] = None
+    history_of_illness: Optional[str] = None
+    vital_signs: VitalSigns
+    physical_exam: Optional[str] = None
+    diagnosis: Optional[str] = None
+    doctor_id: str  # UUID of the logged-in doctor
+
+
+class SaveEncounterResponse(BaseModel):
+    success: bool
+    encounter_id: str
+    patient_id: str
+    case_id: str
+    visit_number: int
+    message: str
