@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../services/encounter_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class NewEncounterPage extends StatefulWidget {
   const NewEncounterPage({super.key});
@@ -10,6 +12,10 @@ class NewEncounterPage extends StatefulWidget {
 class _NewEncounterPageState extends State<NewEncounterPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _ageController = TextEditingController();
+  final _genderController = TextEditingController();
+  final _allergiesController = TextEditingController();
+  final _contactController = TextEditingController();
   final _complaintController = TextEditingController();
   final _historyController = TextEditingController();
   final _examinationController = TextEditingController();
@@ -24,10 +30,13 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
   final _weightController = TextEditingController();
   final _heightController = TextEditingController();
 
+  // Services
+  final _encounterService = EncounterService();
+
   // Analysis state
   bool _isAnalyzing = false;
   bool _hasAnalyzed = false;
-  Map<String, dynamic>? _analysisResults;
+  AnalysisResponse? _analysisResults;
   bool _hasDiagnosisText = false;
 
   @override
@@ -43,6 +52,10 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
   @override
   void dispose() {
     _nameController.dispose();
+    _ageController.dispose();
+    _genderController.dispose();
+    _allergiesController.dispose();
+    _contactController.dispose();
     _complaintController.dispose();
     _historyController.dispose();
     _examinationController.dispose();
@@ -137,6 +150,64 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
                               ],
                             ),
 
+                            const SizedBox(height: 20),
+
+                            // Patient Name
+                            _buildTextField(
+                              controller: _nameController,
+                              label: 'Patient Name',
+                              hint: 'Enter patient full name',
+                              icon: Icons.person_outline,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please enter patient name';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Age and Gender Row
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildTextField(
+                                    controller: _ageController,
+                                    label: 'Age',
+                                    hint: 'Years',
+                                    icon: Icons.cake_outlined,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _buildTextField(
+                                    controller: _genderController,
+                                    label: 'Gender',
+                                    hint: 'M/F/Other',
+                                    icon: Icons.wc_outlined,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Allergies
+                            _buildTextField(
+                              controller: _allergiesController,
+                              label: 'Allergies',
+                              hint: 'List known allergies (e.g., Penicillin, Peanuts)',
+                              icon: Icons.warning_amber_outlined,
+                              maxLines: 2,
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Contact Info
+                            _buildTextField(
+                              controller: _contactController,
+                              label: 'Contact Information',
+                              hint: 'Phone number or email',
+                              icon: Icons.phone_outlined,
+                            ),
                             const SizedBox(height: 20),
 
                             // Chief Complaint
@@ -326,7 +397,7 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
                                       ),
                                 label: Text(
                                   _isAnalyzing
-                                      ? 'Analyzing...'
+                                      ? 'AI is analyzing... (may take 2-3 minutes)'
                                       : 'Analyze Diagnosis with AI',
                                 ),
                                 style: OutlinedButton.styleFrom(
@@ -435,34 +506,33 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
           ),
           // Suggestions Content
           Expanded(
-            child: _hasAnalyzed && _analysisResults != null
-                ? SingleChildScrollView(
-                    padding: const EdgeInsets.all(20),
-                    child: _buildAnalysisResultsContent(),
-                  )
-                : Center(
+            child: _isAnalyzing
+                ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(40),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
-                            Icons.analytics_outlined,
-                            size: 64,
-                            color: Colors.grey.shade300,
+                          const SizedBox(
+                            width: 80,
+                            height: 80,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              color: Color(0xFF059669),
+                            ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 24),
                           Text(
-                            'No Analysis Yet',
+                            'AI is analyzing your diagnosis...',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade600,
+                              color: Colors.grey.shade700,
                             ),
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 12),
                           Text(
-                            'Enter your initial diagnosis and click "Analyze" to get AI-powered suggestions',
+                            'This may take 2-3 minutes\nusing local AI model (Microsoft Phi-2)',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 14,
@@ -472,7 +542,45 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
                         ],
                       ),
                     ),
-                  ),
+                  )
+                : _hasAnalyzed && _analysisResults != null
+                    ? SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: _buildAnalysisResultsContent(),
+                      )
+                    : Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(40),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.analytics_outlined,
+                                size: 64,
+                                color: Colors.grey.shade300,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No Analysis Yet',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Enter your initial diagnosis and click "Analyze" to get AI-powered suggestions',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
           ),
         ],
       ),
@@ -538,15 +646,110 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
     );
   }
 
-  void _submitForm() {
-    if (_formKey.currentState!.validate()) {
-      // Handle form submission
+  void _submitForm() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    // Get current user (doctor)
+    final currentUser = Supabase.instance.client.auth.currentUser;
+    if (currentUser == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Encounter saved successfully!'),
-          backgroundColor: Color(0xFF2563EB),
+          content: Text('❌ You must be logged in to save encounters'),
+          backgroundColor: Colors.red,
         ),
       );
+      return;
+    }
+
+    // Show loading
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('💾 Saving encounter...'),
+        backgroundColor: Color(0xFF2563EB),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    try {
+      // Prepare patient data
+      final patient = PatientData(
+        name: _nameController.text.trim(),
+        age: _ageController.text.isNotEmpty
+            ? int.tryParse(_ageController.text)
+            : null,
+        gender: _genderController.text.isNotEmpty
+            ? _genderController.text.trim()
+            : null,
+        allergies: _allergiesController.text.isNotEmpty
+            ? _allergiesController.text.trim()
+            : null,
+        contactInfo: _contactController.text.isNotEmpty
+            ? _contactController.text.trim()
+            : null,
+      );
+
+      // Prepare vital signs
+      final vitalSigns = VitalSigns(
+        temperature: _temperatureController.text.isNotEmpty
+            ? double.tryParse(_temperatureController.text)
+            : null,
+        bloodPressure: _bloodPressureController.text.isNotEmpty
+            ? _bloodPressureController.text
+            : null,
+        heartRate: _heartRateController.text.isNotEmpty
+            ? double.tryParse(_heartRateController.text)
+            : null,
+        respiratoryRate: _respiratoryRateController.text.isNotEmpty
+            ? double.tryParse(_respiratoryRateController.text)
+            : null,
+        oxygenSaturation: _oxygenSaturationController.text.isNotEmpty
+            ? double.tryParse(_oxygenSaturationController.text)
+            : null,
+        weight: _weightController.text.isNotEmpty
+            ? double.tryParse(_weightController.text)
+            : null,
+        height: _heightController.text.isNotEmpty
+            ? double.tryParse(_heightController.text)
+            : null,
+      );
+
+      // Save encounter
+      final response = await _encounterService.saveEncounter(
+        doctorId: currentUser.id,
+        patient: patient,
+        chiefComplaint: _complaintController.text.trim(),
+        historyOfIllness: _historyController.text.trim(),
+        vitalSigns: vitalSigns,
+        physicalExam: _examinationController.text.trim(),
+        diagnosis: _diagnosisController.text.trim(),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ ${response.message}'),
+            backgroundColor: const Color(0xFF059669),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+
+        // Optionally clear form or navigate away
+        // Navigator.of(context).pop();
+      }
+    } catch (e) {
+      print('Error saving encounter: $e');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to save: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     }
   }
 
@@ -555,72 +758,78 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
       _isAnalyzing = true;
     });
 
-    // Simulate API call - replace with actual API call
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      // Prepare vital signs
+      final vitalSigns = VitalSigns(
+        temperature: _temperatureController.text.isNotEmpty
+            ? double.tryParse(_temperatureController.text)
+            : null,
+        bloodPressure: _bloodPressureController.text.isNotEmpty
+            ? _bloodPressureController.text
+            : null,
+        heartRate: _heartRateController.text.isNotEmpty
+            ? double.tryParse(_heartRateController.text)
+            : null,
+        respiratoryRate: _respiratoryRateController.text.isNotEmpty
+            ? double.tryParse(_respiratoryRateController.text)
+            : null,
+        oxygenSaturation: _oxygenSaturationController.text.isNotEmpty
+            ? double.tryParse(_oxygenSaturationController.text)
+            : null,
+        weight: _weightController.text.isNotEmpty
+            ? double.tryParse(_weightController.text)
+            : null,
+        height: _heightController.text.isNotEmpty
+            ? double.tryParse(_heightController.text)
+            : null,
+      );
 
-    // Mock analysis results - replace with actual API response
-    setState(() {
-      _analysisResults = {
-        'missedDiagnoses': [
-          {
-            'title': 'Pneumonia',
-            'description':
-                'Consider bacterial or viral pneumonia as a complication',
-            'confidence': 'Medium',
-          },
-          {
-            'title': 'Tuberculosis',
-            'description':
-                'Rule out TB especially if persistent cough > 3 weeks',
-            'confidence': 'Low',
-          },
-          {
-            'title': 'Asthma exacerbation',
-            'description': 'Consider if patient has history of asthma',
-            'confidence': 'Medium',
-          },
-        ],
-        'potentialIssues': [
-          {
-            'title': 'Antibiotic resistance',
-            'description':
-                'Consider recent antibiotic use and local resistance patterns',
-            'severity': 'High',
-          },
-          {
-            'title': 'Dehydration risk',
-            'description':
-                'Monitor fluid intake, especially with persistent fever',
-            'severity': 'Medium',
-          },
-        ],
-        'recommendedTests': [
-          {
-            'title': 'Chest X-ray',
-            'description': 'To rule out pneumonia and assess lung condition',
-            'priority': 'High',
-          },
-          {
-            'title': 'Complete Blood Count (CBC)',
-            'description':
-                'Check for infection markers and overall health status',
-            'priority': 'High',
-          },
-          {
-            'title': 'Sputum culture',
-            'description': 'Identify specific bacterial pathogens if present',
-            'priority': 'Medium',
-          },
-          {
-            'title': 'COVID-19 PCR test',
-            'description': 'Rule out COVID-19 infection',
-            'priority': 'Medium',
-          },
-        ],
-      };
-      _isAnalyzing = false;
-      _hasAnalyzed = true;
-    });
+      // Call API
+      final response = await _encounterService.analyzeEncounter(
+        patientId: _nameController.text.isNotEmpty
+            ? _nameController.text
+            : 'Unknown Patient',
+        diagnosis: _diagnosisController.text,
+        symptoms: _complaintController.text.isNotEmpty
+            ? _complaintController.text
+            : 'No symptoms provided',
+        vitalSigns: vitalSigns,
+        examinationFindings: _examinationController.text.isNotEmpty
+            ? _examinationController.text
+            : null,
+      );
+
+      setState(() {
+        _analysisResults = response;
+        _hasAnalyzed = true;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Analysis completed successfully!'),
+            backgroundColor: Color(0xFF059669),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error analyzing diagnosis: $e');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Analysis failed: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } finally {
+      setState(() {
+        _isAnalyzing = false;
+      });
+    }
   }
 
   void _addToDiagnosis(String text) {
@@ -643,11 +852,13 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
   }
 
   Widget _buildAnalysisResultsContent() {
+    if (_analysisResults == null) return const SizedBox();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Missed Diagnoses
-        if (_analysisResults!['missedDiagnoses'] != null) ...[
+        if (_analysisResults!.missedDiagnoses.isNotEmpty) ...[
           const Text(
             'Potential Missed Diagnoses',
             style: TextStyle(
@@ -657,15 +868,18 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
             ),
           ),
           const SizedBox(height: 12),
-          ..._buildSuggestionsList(
-            _analysisResults!['missedDiagnoses'],
-            Colors.orange,
-          ),
+          ..._analysisResults!.missedDiagnoses.map((diagnosis) =>
+              _buildSuggestionCard(
+                title: diagnosis.title,
+                description: diagnosis.description,
+                badge: diagnosis.confidence,
+                color: Colors.orange,
+              )),
           const SizedBox(height: 20),
         ],
 
         // Potential Issues
-        if (_analysisResults!['potentialIssues'] != null) ...[
+        if (_analysisResults!.potentialIssues.isNotEmpty) ...[
           const Text(
             'Potential Issues',
             style: TextStyle(
@@ -675,15 +889,18 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
             ),
           ),
           const SizedBox(height: 12),
-          ..._buildSuggestionsList(
-            _analysisResults!['potentialIssues'],
-            Colors.red,
-          ),
+          ..._analysisResults!.potentialIssues.map((issue) =>
+              _buildSuggestionCard(
+                title: issue.title,
+                description: issue.description,
+                badge: issue.severity,
+                color: Colors.red,
+              )),
           const SizedBox(height: 20),
         ],
 
         // Recommended Tests
-        if (_analysisResults!['recommendedTests'] != null) ...[
+        if (_analysisResults!.recommendedTests.isNotEmpty) ...[
           const Text(
             'Recommended Tests',
             style: TextStyle(
@@ -693,101 +910,100 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
             ),
           ),
           const SizedBox(height: 12),
-          ..._buildSuggestionsList(
-            _analysisResults!['recommendedTests'],
-            Colors.blue,
-          ),
+          ..._analysisResults!.recommendedTests.map((test) =>
+              _buildSuggestionCard(
+                title: test.title,
+                description: test.description,
+                badge: test.priority,
+                color: Colors.blue,
+              )),
         ],
       ],
     );
   }
 
-  List<Widget> _buildSuggestionsList(List<dynamic> suggestions, Color color) {
-    return suggestions.map<Widget>((suggestion) {
-      return Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: color.withAlpha(13),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withAlpha(51)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: color.withAlpha(25),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Icon(Icons.lightbulb_outline, color: color, size: 16),
+  Widget _buildSuggestionCard({
+    required String title,
+    required String description,
+    required String badge,
+    required Color color,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withAlpha(13),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withAlpha(51)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: color.withAlpha(25),
+              borderRadius: BorderRadius.circular(6),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    suggestion['title'] ?? '',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1E293B),
-                    ),
+            child: Icon(Icons.lightbulb_outline, color: color, size: 16),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E293B),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    suggestion['description'] ?? '',
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                  ),
-                  if (suggestion['confidence'] != null ||
-                      suggestion['severity'] != null ||
-                      suggestion['priority'] != null) ...[
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: color.withAlpha(25),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        suggestion['confidence'] ??
-                            suggestion['severity'] ??
-                            suggestion['priority'] ??
-                            '',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: color,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton(
-              onPressed: () => _addToDiagnosis(suggestion['title']),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF059669),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
                 ),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: const Text('Add', style: TextStyle(fontSize: 12)),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: color.withAlpha(25),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    badge,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: color,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      );
-    }).toList();
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: () => _addToDiagnosis(title),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF059669),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 8,
+              ),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('Add', style: TextStyle(fontSize: 12)),
+          ),
+        ],
+      ),
+    );
   }
 }
