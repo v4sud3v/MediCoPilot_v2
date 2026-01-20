@@ -3,6 +3,7 @@ import 'sidebar.dart';
 import '../pages/new_encounter_page.dart';
 import '../pages/all_encounters_page.dart';
 import '../pages/patient_education_page.dart';
+import '../services/encounter_service.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
@@ -14,21 +15,12 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   int _selectedIndex = 0;
   String? _selectedPatient;
+  String? _selectedPatientId;
   final TextEditingController _searchController = TextEditingController();
-  List<String> _filteredPatients = [];
+  List<PatientSearchResult> _searchResults = [];
   bool _isSearching = false;
-
-  // Sample patient data - replace with your actual data source
-  final List<String> _allPatients = [
-    'John Doe - MRN: 12345',
-    'Jane Smith - MRN: 12346',
-    'Robert Johnson - MRN: 12347',
-    'Emily Davis - MRN: 12348',
-    'Michael Brown - MRN: 12349',
-    'Sarah Wilson - MRN: 12350',
-    'David Martinez - MRN: 12351',
-    'Lisa Anderson - MRN: 12352',
-  ];
+  bool _isLoadingResults = false;
+  final EncounterService _encounterService = EncounterService();
 
   // List of pages corresponding to sidebar items
   final List<Widget> _pages = [
@@ -41,8 +33,7 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   void initState() {
     super.initState();
-    _filteredPatients = _allPatients;
-    _searchController.addListener(_filterPatients);
+    _searchController.addListener(_onSearchChanged);
   }
 
   @override
@@ -51,20 +42,40 @@ class _MainLayoutState extends State<MainLayout> {
     super.dispose();
   }
 
-  void _filterPatients() {
+  void _onSearchChanged() {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) {
+      setState(() {
+        _searchResults = [];
+      });
+      return;
+    }
+
+    _performSearch(query);
+  }
+
+  Future<void> _performSearch(String query) async {
     setState(() {
-      if (_searchController.text.isEmpty) {
-        _filteredPatients = _allPatients;
-      } else {
-        _filteredPatients = _allPatients
-            .where(
-              (patient) => patient.toLowerCase().contains(
-                _searchController.text.toLowerCase(),
-              ),
-            )
-            .toList();
-      }
+      _isLoadingResults = true;
     });
+
+    try {
+      final results = await _encounterService.searchPatients(
+        query: query,
+        limit: 8,
+      );
+
+      setState(() {
+        _searchResults = results;
+        _isLoadingResults = false;
+      });
+    } catch (e) {
+      print('Error searching patients: $e');
+      setState(() {
+        _searchResults = [];
+        _isLoadingResults = false;
+      });
+    }
   }
 
   void _onItemSelected(int index) {
@@ -73,12 +84,22 @@ class _MainLayoutState extends State<MainLayout> {
     });
   }
 
-  void _selectPatient(String patient) {
+  void _selectPatient(PatientSearchResult patient) {
     setState(() {
-      _selectedPatient = patient;
+      _selectedPatient = patient.name;
+      _selectedPatientId = patient.id;
       _isSearching = false;
       _searchController.clear();
+      _searchResults = [];
     });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Selected patient: ${patient.name}'),
+        backgroundColor: const Color(0xFF059669),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -226,38 +247,57 @@ class _MainLayoutState extends State<MainLayout> {
                 ),
               ],
             ),
-            child: _filteredPatients.isEmpty
+            child: _isLoadingResults
                 ? const Padding(
                     padding: EdgeInsets.all(16),
-                    child: Text(
-                      'No patients found',
-                      style: TextStyle(color: Colors.grey),
+                    child: SizedBox(
+                      height: 30,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Color(0xFF2563EB),
+                        ),
+                      ),
                     ),
                   )
-                : ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: _filteredPatients.length,
-                    itemBuilder: (context, index) {
-                      final patient = _filteredPatients[index];
-                      return ListTile(
-                        dense: true,
-                        leading: const CircleAvatar(
-                          radius: 16,
-                          backgroundColor: Color(0xFF2563EB),
-                          child: Icon(
-                            Icons.person,
-                            size: 16,
-                            color: Colors.white,
-                          ),
+                : _searchResults.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text(
+                          'No patients found',
+                          style: TextStyle(color: Colors.grey),
                         ),
-                        title: Text(
-                          patient,
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                        onTap: () => _selectPatient(patient),
-                      );
-                    },
-                  ),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _searchResults.length,
+                        itemBuilder: (context, index) {
+                          final patient = _searchResults[index];
+                          return ListTile(
+                            dense: true,
+                            leading: const CircleAvatar(
+                              radius: 16,
+                              backgroundColor: Color(0xFF2563EB),
+                              child: Icon(
+                                Icons.person,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                            ),
+                            title: Text(
+                              patient.name,
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                            subtitle: Text(
+                              patient.age != null
+                                  ? '${patient.age} years old${patient.gender != null ? ' • ${patient.gender}' : ''}'
+                                  : patient.gender ?? 'No details',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            onTap: () => _selectPatient(patient),
+                          );
+                        },
+                      ),
           ),
       ],
     );

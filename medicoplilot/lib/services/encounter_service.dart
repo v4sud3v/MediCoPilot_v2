@@ -204,8 +204,102 @@ class SaveEncounterResponse {
   }
 }
 
+class PatientSearchResult {
+  final String id;
+  final String name;
+  final int? age;
+  final String? gender;
+  final String? contactInfo;
+
+  PatientSearchResult({
+    required this.id,
+    required this.name,
+    this.age,
+    this.gender,
+    this.contactInfo,
+  });
+
+  factory PatientSearchResult.fromJson(Map<String, dynamic> json) {
+    return PatientSearchResult(
+      id: json['id'] ?? '',
+      name: json['name'] ?? '',
+      age: json['age'],
+      gender: json['gender'],
+      contactInfo: json['contact_info'],
+    );
+  }
+}
+
 class EncounterService {
   final String baseUrl = ApiConfig.baseUrl;
+
+  Future<List<PatientSearchResult>> searchPatients({
+    required String query,
+    int limit = 10,
+  }) async {
+    try {
+      final url = Uri.parse(
+        '$baseUrl/search/patients?query=${Uri.encodeComponent(query)}&limit=$limit',
+      );
+
+      print('🔵 Searching patients: $url');
+
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      ).timeout(
+        const Duration(seconds: 10),
+      );
+
+      print('📥 Search response status: ${response.statusCode}');
+      print('📥 Search response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonData = jsonDecode(response.body);
+        return jsonData
+            .map((patient) => PatientSearchResult.fromJson(patient))
+            .toList();
+      } else {
+        throw Exception('Failed to search patients: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('❌ Error in searchPatients: $e');
+      rethrow;
+    }
+  }
+
+  Future<PatientSearchResult> getPatientDetails(String patientId) async {
+    try {
+      final url = Uri.parse('$baseUrl/search/patients/$patientId');
+
+      print('🔵 Fetching patient details: $url');
+
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      ).timeout(
+        const Duration(seconds: 10),
+      );
+
+      print('📥 Patient details response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body);
+        return PatientSearchResult.fromJson(jsonData);
+      } else {
+        throw Exception('Failed to fetch patient details: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('❌ Error in getPatientDetails: $e');
+      rethrow;
+    }
+  }
 
   Future<SaveEncounterResponse> saveEncounter({
     required String doctorId,
