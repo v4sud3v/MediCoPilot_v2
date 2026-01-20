@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from datamodel import AnalyzeEncounterRequest, AnalyzeEncounterResponse
-from apis.analyze_encounter import analyze_encounter
+from apis.auth import router as auth_router
+from apis.analyze_encounter import router as analysis_router
 
 app = FastAPI(
     title="MediCoPilot API",
-    description="Medical diagnosis analysis using ClinicalBERT",
+    description="Medical diagnosis analysis",
     version="1.0.0"
 )
 
@@ -18,25 +18,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include routers
+app.include_router(auth_router)
+app.include_router(analysis_router)
 
-@app.get("/")
+
+@app.get("/", tags=["Health"])
 def root():
     return {
         "message": "MediCoPilot API",
         "version": "1.0.0",
-        "endpoints": ["/analyze_encounter"]
+        "endpoints": {
+            "health": "/",
+            "authentication": "/auth/*",
+            "analysis": "/analysis/encounter"
+        }
     }
-
-
-@app.post("/analyze_encounter", response_model=AnalyzeEncounterResponse)
-async def analyze_encounter_endpoint(request: AnalyzeEncounterRequest):
-    """
-    Analyzes encounter data including diagnosis, symptoms, and vital signs.
-    Returns potential red flags, missed diagnoses, and recommended tests.
-    
-    Uses ClinicalBERT model for medical text understanding.
-    """
-    return analyze_encounter(request)
 
 
 if __name__ == "__main__":
