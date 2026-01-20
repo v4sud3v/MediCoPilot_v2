@@ -1,7 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'token_service.dart';
 
 class AuthService {
   final SupabaseClient _supabase = Supabase.instance.client;
+  final TokenService _tokenService = TokenService();
 
   // Get current user
   User? get currentUser => _supabase.auth.currentUser;
@@ -9,15 +11,48 @@ class AuthService {
   // Check if user is signed in
   bool get isSignedIn => currentUser != null;
 
+  // Get current session
+  Session? get currentSession => _supabase.auth.currentSession;
+
   // Sign in with email and password
   Future<AuthResponse> signIn({
     required String email,
     required String password,
   }) async {
-    return await _supabase.auth.signInWithPassword(
+    final response = await _supabase.auth.signInWithPassword(
       email: email,
       password: password,
     );
+    
+    // Save session data for persistence
+    if (response.user != null && response.session != null) {
+      await _tokenService.saveToken(response.session!.accessToken);
+      await _tokenService.saveUserData({
+        'id': response.user!.id,
+        'email': response.user!.email,
+      });
+      print('✅ User signed in and session saved.');
+    }
+    
+    return response;
+  }
+
+  // Restore session from saved token
+  Future<bool> restoreSession() async {
+    try {
+      final token = await _tokenService.getToken();
+      if (token != null) {
+        // Check if user is still valid
+        if (currentUser != null) {
+          print('✅ Session restored from token.');
+          return true;
+        }
+      }
+      return false;
+    } catch (e) {
+      print('Error restoring session: $e');
+      return false;
+    }
   }
 
   // Sign up new doctor
@@ -59,6 +94,9 @@ class AuthService {
   // Sign out
   Future<void> signOut() async {
     await _supabase.auth.signOut();
+    // Clear saved session data
+    await _tokenService.clearAll();
+    print('✅ User signed out and session cleared.');
   }
 
   // Get doctor details from doctors table
