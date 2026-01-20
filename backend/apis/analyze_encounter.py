@@ -1,3 +1,4 @@
+from fastapi import APIRouter
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 import re
@@ -8,6 +9,8 @@ from datamodel import (
     PotentialIssue,
     RecommendedTest
 )
+
+router = APIRouter(prefix="/analysis", tags=["Analysis"])
 
 # Load Microsoft Phi-2 model globally (only once)
 print("Loading Phi-2 model...")
@@ -141,8 +144,14 @@ def parse_model_output(output: str) -> tuple:
     return missed_diagnoses, potential_issues, recommended_tests
 
 
-def analyze_encounter(request: AnalyzeEncounterRequest) -> AnalyzeEncounterResponse:
-    """Analyze encounter using Phi-2 model"""
+@router.post("/encounter", response_model=AnalyzeEncounterResponse)
+async def analyze_encounter(request: AnalyzeEncounterRequest) -> AnalyzeEncounterResponse:
+    """
+    Analyzes encounter data including diagnosis, symptoms, and vital signs.
+    Returns potential red flags, missed diagnoses, and recommended tests.
+    
+    Uses Phi-2 model for medical text understanding.
+    """
     
     # Create prompt
     prompt = create_prompt(request)
