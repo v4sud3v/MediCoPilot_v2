@@ -1,6 +1,6 @@
-from fastapi import APIRouter
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
+from fastapi import APIRouter, HTTPException
+from openai import OpenAI
+import os
 import re
 from datamodel import (
     AnalyzeEncounterRequest,
@@ -12,17 +12,17 @@ from datamodel import (
 
 router = APIRouter(prefix="/analysis", tags=["Analysis"])
 
-# Load Microsoft Phi-2 model globally (only once)
-print("Loading Phi-2 model...")
-model_name = "microsoft/phi-2"
-tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    torch_dtype=torch.float16,
-    trust_remote_code=True,
-    device_map="auto"
+# Configure Groq API (OpenAI-compatible)
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+if not GROQ_API_KEY:
+    raise ValueError("GROQ_API_KEY environment variable not set")
+
+# Create Groq client using OpenAI-compatible interface
+client = OpenAI(
+    api_key=GROQ_API_KEY,
+    base_url="https://api.groq.com/openai/v1",
 )
-print("Model loaded successfully!")
+print("Groq API configured successfully!")
 
 
 def create_prompt(request: AnalyzeEncounterRequest) -> str:
@@ -150,40 +150,35 @@ async def analyze_encounter(request: AnalyzeEncounterRequest) -> AnalyzeEncounte
     Analyzes encounter data including diagnosis, symptoms, and vital signs.
     Returns potential red flags, missed diagnoses, and recommended tests.
     
-    Uses Phi-2 model for medical text understanding.
+    Uses Groq API for medical text understanding.
     """
     
     # Create prompt
     prompt = create_prompt(request)
     
-    # Get device from model
-    device = model.device
-    
-    # Generate response
-    inputs = tokenizer(prompt, return_tensors="pt", return_attention_mask=True)
-    inputs = {k: v.to(device) for k, v in inputs.items()}  # Move inputs to same device as model
-    
-    with torch.no_grad():
-        outputs = model.generate(
-            **inputs,
-            max_length=1024,
+    try:
+        # Call Groq API (OpenAI-compatible)
+        response = client.chat.completions.create(
+            model="openai/gpt-oss-20b",
+            messages=[
+                {"role": "system", "content": "You are a medical diagnostic assistant."},
+                {"role": "user", "content": prompt}
+            ],
             temperature=0.7,
-            do_sample=True,
-            top_p=0.9,
-            pad_token_id=tokenizer.eos_token_id
+            max_tokens=2048
         )
-    
-    # Decode output
-    generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    response = generated_text[len(prompt):].strip()
-    
-    print(f"\n=== MODEL OUTPUT ===\n{response}\n===================\n")
-    
-    # Parse into structured format
-    missed, issues, tests = parse_model_output(response)
-    
-    return AnalyzeEncounterResponse(
-        missedDiagnoses=missed,
-        potentialIssues=issues,
-        recommendedTests=tests
-    )
+        generated_text = response.choices[0].message.content
+        
+        print(f"\n=== GROQ API OUTPUT ===\n{generated_text}\n===================\n")
+        
+        # Parse into structured format
+        missed, issues, tests = parse_model_output(generated_text)
+        
+        return AnalyzeEncounterResponse(
+            missedDiagnoses=missed,
+            potentialIssues=issues,
+            recommendedTests=tests
+        )
+    except Exception as e:
+        print(f"Error calling Groq API: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

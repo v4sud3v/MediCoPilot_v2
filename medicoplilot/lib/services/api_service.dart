@@ -155,4 +155,23 @@ class ApiService {
       return ApiException('An unexpected error occurred: ${error.toString()}');
     }
   }
+
+  // Analyze encounter endpoint
+  Future<dynamic> analyzeEncounter({
+    required String patientId,
+    required String diagnosis,
+    required String symptoms,
+    required Map<String, dynamic> vitalSigns,
+    String? examinationFindings,
+  }) async {
+    final body = {
+      'patient_id': patientId,
+      'diagnosis': diagnosis,
+      'symptoms': symptoms,
+      'vital_signs': vitalSigns,
+      if (examinationFindings != null) 'examination_findings': examinationFindings,
+    };
+
+    return post('/analysis/encounter', body, requiresAuth: false);
+  }
 }

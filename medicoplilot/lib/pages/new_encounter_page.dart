@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
 
 class NewEncounterPage extends StatefulWidget {
   const NewEncounterPage({super.key});
@@ -9,6 +10,7 @@ class NewEncounterPage extends StatefulWidget {
 
 class _NewEncounterPageState extends State<NewEncounterPage> {
   final _formKey = GlobalKey<FormState>();
+  final _apiService = ApiService();
   final _nameController = TextEditingController();
   final _complaintController = TextEditingController();
   final _historyController = TextEditingController();
@@ -555,72 +557,68 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
       _isAnalyzing = true;
     });
 
-    // Simulate API call - replace with actual API call
-    await Future.delayed(const Duration(seconds: 2));
-
-    // Mock analysis results - replace with actual API response
-    setState(() {
-      _analysisResults = {
-        'missedDiagnoses': [
-          {
-            'title': 'Pneumonia',
-            'description':
-                'Consider bacterial or viral pneumonia as a complication',
-            'confidence': 'Medium',
-          },
-          {
-            'title': 'Tuberculosis',
-            'description':
-                'Rule out TB especially if persistent cough > 3 weeks',
-            'confidence': 'Low',
-          },
-          {
-            'title': 'Asthma exacerbation',
-            'description': 'Consider if patient has history of asthma',
-            'confidence': 'Medium',
-          },
-        ],
-        'potentialIssues': [
-          {
-            'title': 'Antibiotic resistance',
-            'description':
-                'Consider recent antibiotic use and local resistance patterns',
-            'severity': 'High',
-          },
-          {
-            'title': 'Dehydration risk',
-            'description':
-                'Monitor fluid intake, especially with persistent fever',
-            'severity': 'Medium',
-          },
-        ],
-        'recommendedTests': [
-          {
-            'title': 'Chest X-ray',
-            'description': 'To rule out pneumonia and assess lung condition',
-            'priority': 'High',
-          },
-          {
-            'title': 'Complete Blood Count (CBC)',
-            'description':
-                'Check for infection markers and overall health status',
-            'priority': 'High',
-          },
-          {
-            'title': 'Sputum culture',
-            'description': 'Identify specific bacterial pathogens if present',
-            'priority': 'Medium',
-          },
-          {
-            'title': 'COVID-19 PCR test',
-            'description': 'Rule out COVID-19 infection',
-            'priority': 'Medium',
-          },
-        ],
+    try {
+      // Parse vital signs from controllers
+      final vitalSigns = {
+        'temperature': _temperatureController.text.isNotEmpty
+            ? double.tryParse(_temperatureController.text)
+            : null,
+        'blood_pressure': _bloodPressureController.text.isNotEmpty
+            ? _bloodPressureController.text
+            : null,
+        'heart_rate': _heartRateController.text.isNotEmpty
+            ? double.tryParse(_heartRateController.text)
+            : null,
+        'respiratory_rate': _respiratoryRateController.text.isNotEmpty
+            ? double.tryParse(_respiratoryRateController.text)
+            : null,
+        'oxygen_saturation': _oxygenSaturationController.text.isNotEmpty
+            ? double.tryParse(_oxygenSaturationController.text)
+            : null,
+        'weight': _weightController.text.isNotEmpty
+            ? double.tryParse(_weightController.text)
+            : null,
+        'height': _heightController.text.isNotEmpty
+            ? double.tryParse(_heightController.text)
+            : null,
       };
-      _isAnalyzing = false;
-      _hasAnalyzed = true;
-    });
+
+      // Remove null values
+      vitalSigns.removeWhere((key, value) => value == null);
+
+      // Call API
+      final response = await _apiService.analyzeEncounter(
+        patientId: _nameController.text.isNotEmpty
+            ? _nameController.text
+            : 'Patient${DateTime.now().millisecondsSinceEpoch}',
+        diagnosis: _diagnosisController.text,
+        symptoms: _complaintController.text,
+        vitalSigns: vitalSigns,
+        examinationFindings: _examinationController.text.isNotEmpty
+            ? _examinationController.text
+            : null,
+      );
+
+      setState(() {
+        _analysisResults = response;
+        _isAnalyzing = false;
+        _hasAnalyzed = true;
+      });
+    } catch (e) {
+      setState(() {
+        _isAnalyzing = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error analyzing diagnosis: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
   }
 
   void _addToDiagnosis(String text) {

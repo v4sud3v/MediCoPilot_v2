@@ -7,3 +7,4 @@ python-multipart
 pydantic
 pydantic[email]
 httpx
+google-genai

@@ -5,3 +5,9 @@ class SupabaseConfig {
   static String get supabaseUrl => dotenv.env['SUPABASE_URL'] ?? '';
   static String get supabaseAnonKey => dotenv.env['SUPABASE_PUBLISHABLE_KEY'] ?? '';
 }
+
+class ApiConfig {
+  // Backend API configuration
+  static const String baseUrl = 'http://localhost:8000';
+  static const Duration timeout = Duration(seconds: 30);
+}
