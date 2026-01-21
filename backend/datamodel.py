@@ -19,6 +19,7 @@ class AnalyzeEncounterRequest(BaseModel):
     symptoms: str
     vital_signs: VitalSigns
     examination_findings: Optional[str] = None
+    medications: Optional[str] = None
 
 
 class MissedDiagnosis(BaseModel):
@@ -46,21 +47,14 @@ class AnalyzeEncounterResponse(BaseModel):
 
 
 # Save Encounter Models
-class PatientData(BaseModel):
-    name: str
-    age: Optional[int] = None
-    gender: Optional[str] = None
-    allergies: Optional[str] = None
-    contact_info: Optional[str] = None
-
-
 class SaveEncounterRequest(BaseModel):
-    patient: PatientData
+    patient_id: str  # UUID of the existing patient
     chief_complaint: Optional[str] = None
     history_of_illness: Optional[str] = None
     vital_signs: VitalSigns
     physical_exam: Optional[str] = None
     diagnosis: Optional[str] = None
+    medications: Optional[str] = None
     doctor_id: str  # UUID of the logged-in doctor
 
 

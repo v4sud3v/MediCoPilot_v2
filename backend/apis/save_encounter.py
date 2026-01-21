@@ -22,62 +22,40 @@ async def save_encounter(request: SaveEncounterRequest) -> SaveEncounterResponse
     Save a new patient encounter to the database.
     
     Steps:
-    1. Check if patient exists (by name and doctor_id)
-    2. If not, create new patient
-    3. Generate case_id (first visit) or use existing case_id
-    4. Create encounter record with visit_number
-    5. Return encounter details
+    1. Fetch existing patient by patient_id
+    2. Get the latest encounter for this patient to determine case_id and visit_number
+    3. Create encounter record with appropriate visit_number
+    4. Return encounter details
     """
     
     try:
-        # Step 1: Check if patient exists for this doctor
-        existing_patient = supabase.table('patients').select('*').eq(
-            'name', request.patient.name
-        ).eq('doctor_id', request.doctor_id).execute()
+        # Step 1: Fetch existing patient by patient_id
+        patient_result = supabase.table('patients').select('*').eq(
+            'id', request.patient_id
+        ).execute()
         
-        patient_id = None
+        if not patient_result.data or len(patient_result.data) == 0:
+            raise HTTPException(status_code=404, detail="Patient not found")
+        
+        patient_id = request.patient_id
+        
+        # Step 2: Get the latest encounter for this patient
         case_id = None
         visit_number = 1
         
-        if existing_patient.data and len(existing_patient.data) > 0:
-            # Patient exists - this is a follow-up visit
-            patient_id = existing_patient.data[0]['id']
-            
-            # Get the latest encounter for this patient to determine case_id and visit_number
-            latest_encounter = supabase.table('encounters').select(
-                'case_id, visit_number'
-            ).eq('patient_id', patient_id).order(
-                'visit_number', desc=True
-            ).limit(1).execute()
-            
-            if latest_encounter.data and len(latest_encounter.data) > 0:
-                # Continuing existing case
-                case_id = latest_encounter.data[0]['case_id']
-                visit_number = latest_encounter.data[0]['visit_number'] + 1
-            else:
-                # First encounter for existing patient
-                case_id = str(uuid.uuid4())
-                visit_number = 1
+        latest_encounter = supabase.table('encounters').select(
+            'case_id, visit_number'
+        ).eq('patient_id', patient_id).order(
+            'visit_number', desc=True
+        ).limit(1).execute()
+        
+        if latest_encounter.data and len(latest_encounter.data) > 0:
+            # Continuing existing case
+            case_id = latest_encounter.data[0]['case_id']
+            visit_number = latest_encounter.data[0]['visit_number'] + 1
         else:
-            # Step 2: Create new patient
-            new_patient_data = {
-                'doctor_id': request.doctor_id,
-                'name': request.patient.name,
-                'age': request.patient.age,
-                'gender': request.patient.gender,
-                'allergies': request.patient.allergies,
-                'contact_info': request.patient.contact_info,
-            }
-            
-            patient_result = supabase.table('patients').insert(
-                new_patient_data
-            ).execute()
-            
-            if not patient_result.data:
-                raise HTTPException(status_code=500, detail="Failed to create patient")
-            
-            patient_id = patient_result.data[0]['id']
-            case_id = str(uuid.uuid4())  # New case for new patient
+            # First encounter for this patient
+            case_id = str(uuid.uuid4())
             visit_number = 1
         
         # Step 3: Create encounter record
@@ -97,6 +75,7 @@ async def save_encounter(request: SaveEncounterRequest) -> SaveEncounterResponse
             'height': request.vital_signs.height,
             'physical_exam': request.physical_exam,
             'diagnosis': request.diagnosis,
+            'medications': request.medications,
         }
         
         encounter_result = supabase.table('encounters').insert(

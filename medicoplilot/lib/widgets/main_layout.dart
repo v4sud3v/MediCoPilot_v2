@@ -16,6 +16,7 @@ class _MainLayoutState extends State<MainLayout> {
   int _selectedIndex = 0;
   String? _selectedPatient;
   String? _selectedPatientId;
+  PatientDetails? _selectedPatientDetails;
   final TextEditingController _searchController = TextEditingController();
   List<PatientSearchResult> _searchResults = [];
   bool _isSearching = false;
@@ -23,17 +24,25 @@ class _MainLayoutState extends State<MainLayout> {
   final EncounterService _encounterService = EncounterService();
 
   // List of pages corresponding to sidebar items
-  final List<Widget> _pages = [
-    const NewEncounterPage(),
-    const AllEncountersPage(),
-    const PatientEducationPage(),
-    // Add more pages here as you create them
-  ];
+  List<Widget> _pages = [];
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchChanged);
+    _initializePages();
+  }
+  
+  void _initializePages() {
+    _pages = [
+      NewEncounterPage(
+        selectedPatientId: _selectedPatientId,
+        selectedPatientName: _selectedPatient,
+        selectedPatientDetails: _selectedPatientDetails,
+      ),
+      const AllEncountersPage(),
+      const PatientEducationPage(),
+    ];
   }
 
   @override
@@ -84,22 +93,38 @@ class _MainLayoutState extends State<MainLayout> {
     });
   }
 
-  void _selectPatient(PatientSearchResult patient) {
-    setState(() {
-      _selectedPatient = patient.name;
-      _selectedPatientId = patient.id;
-      _isSearching = false;
-      _searchController.clear();
-      _searchResults = [];
-    });
+  void _selectPatient(PatientSearchResult patient) async {
+    // First, fetch full patient details
+    try {
+      final patientDetails = await _encounterService.getPatientDetails(patient.id);
+      
+      setState(() {
+        _selectedPatient = patient.name;
+        _selectedPatientId = patient.id;
+        _selectedPatientDetails = patientDetails;
+        _isSearching = false;
+        _searchController.clear();
+        _searchResults = [];
+        _initializePages();
+      });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Selected patient: ${patient.name}'),
-        backgroundColor: const Color(0xFF059669),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Selected patient: ${patient.name}'),
+          backgroundColor: const Color(0xFF059669),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      print('Error fetching patient details: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading patient details: ${e.toString()}'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   @override

@@ -4,7 +4,16 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/api_service.dart';
 
 class NewEncounterPage extends StatefulWidget {
-  const NewEncounterPage({super.key});
+  final String? selectedPatientId;
+  final String? selectedPatientName;
+  final PatientDetails? selectedPatientDetails;
+
+  const NewEncounterPage({
+    super.key,
+    this.selectedPatientId,
+    this.selectedPatientName,
+    this.selectedPatientDetails,
+  });
 
   @override
   State<NewEncounterPage> createState() => _NewEncounterPageState();
@@ -13,15 +22,14 @@ class NewEncounterPage extends StatefulWidget {
 class _NewEncounterPageState extends State<NewEncounterPage> {
   final _formKey = GlobalKey<FormState>();
   final _apiService = ApiService();
-  final _nameController = TextEditingController();
-  final _ageController = TextEditingController();
-  final _genderController = TextEditingController();
-  final _allergiesController = TextEditingController();
-  final _contactController = TextEditingController();
+
+  // Encounter fields controllers
   final _complaintController = TextEditingController();
   final _historyController = TextEditingController();
   final _examinationController = TextEditingController();
   final _diagnosisController = TextEditingController();
+  final _allergiesController = TextEditingController();
+  final _medicationController = TextEditingController();
 
   // Vital signs controllers
   final _temperatureController = TextEditingController();
@@ -49,19 +57,36 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
         _hasDiagnosisText = _diagnosisController.text.trim().isNotEmpty;
       });
     });
+
+    // Populate allergies from patient details if available
+    if (widget.selectedPatientDetails?.allergies != null) {
+      _allergiesController.text = widget.selectedPatientDetails!.allergies!;
+    }
+  }
+
+  @override
+  void didUpdateWidget(NewEncounterPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // Update allergies field when patient details change
+    if (widget.selectedPatientDetails?.allergies !=
+        oldWidget.selectedPatientDetails?.allergies) {
+      if (widget.selectedPatientDetails?.allergies != null) {
+        _allergiesController.text = widget.selectedPatientDetails!.allergies!;
+      } else {
+        _allergiesController.clear();
+      }
+    }
   }
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _ageController.dispose();
-    _genderController.dispose();
-    _allergiesController.dispose();
-    _contactController.dispose();
     _complaintController.dispose();
     _historyController.dispose();
     _examinationController.dispose();
     _diagnosisController.dispose();
+    _allergiesController.dispose();
+    _medicationController.dispose();
     _temperatureController.dispose();
     _bloodPressureController.dispose();
     _heartRateController.dispose();
@@ -154,61 +179,88 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
 
                             const SizedBox(height: 20),
 
-                            // Patient Name
-                            _buildTextField(
-                              controller: _nameController,
-                              label: 'Patient Name',
-                              hint: 'Enter patient full name',
-                              icon: Icons.person_outline,
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Please enter patient name';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Age and Gender Row
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildTextField(
-                                    controller: _ageController,
-                                    label: 'Age',
-                                    hint: 'Years',
-                                    icon: Icons.cake_outlined,
+                            // Display Patient Information (Read-only)
+                            if (widget.selectedPatientDetails != null) ...[
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2563EB).withAlpha(13),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: const Color(
+                                      0xFF2563EB,
+                                    ).withAlpha(51),
                                   ),
                                 ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: _buildTextField(
-                                    controller: _genderController,
-                                    label: 'Gender',
-                                    hint: 'M/F/Other',
-                                    icon: Icons.wc_outlined,
-                                  ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      widget.selectedPatientDetails!.name,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        if (widget
+                                                .selectedPatientDetails!
+                                                .age !=
+                                            null) ...[
+                                          Text(
+                                            'Age: ${widget.selectedPatientDetails!.age} years',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 20),
+                                        ],
+                                        if (widget
+                                                .selectedPatientDetails!
+                                                .gender !=
+                                            null) ...[
+                                          Text(
+                                            'Gender: ${widget.selectedPatientDetails!.gender}',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    if (widget
+                                            .selectedPatientDetails!
+                                            .contactInfo !=
+                                        null) ...[
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Contact: ${widget.selectedPatientDetails!.contactInfo}',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
+                              ),
+                              const SizedBox(height: 20),
+                            ],
 
-                            // Allergies
+                            // Allergies (Editable)
                             _buildTextField(
                               controller: _allergiesController,
                               label: 'Allergies',
-                              hint: 'List known allergies (e.g., Penicillin, Peanuts)',
+                              hint:
+                                  'List known allergies (e.g., Penicillin, Peanuts)',
                               icon: Icons.warning_amber_outlined,
                               maxLines: 2,
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Contact Info
-                            _buildTextField(
-                              controller: _contactController,
-                              label: 'Contact Information',
-                              hint: 'Phone number or email',
-                              icon: Icons.phone_outlined,
                             ),
                             const SizedBox(height: 20),
 
@@ -357,6 +409,17 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
                                   'Record physical examination findings and observations',
                               icon: Icons.medical_services_outlined,
                               maxLines: 4,
+                            ),
+                            const SizedBox(height: 20),
+
+                            // Medications
+                            _buildTextField(
+                              controller: _medicationController,
+                              label: 'Medications',
+                              hint:
+                                  'List current medications (e.g., Aspirin 500mg daily, Lisinopril 10mg)',
+                              icon: Icons.medical_information,
+                              maxLines: 3,
                             ),
                             const SizedBox(height: 24),
 
@@ -546,43 +609,43 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
                     ),
                   )
                 : _hasAnalyzed && _analysisResults != null
-                    ? SingleChildScrollView(
-                        padding: const EdgeInsets.all(20),
-                        child: _buildAnalysisResultsContent(),
-                      )
-                    : Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(40),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.analytics_outlined,
-                                size: 64,
-                                color: Colors.grey.shade300,
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No Analysis Yet',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Enter your initial diagnosis and click "Analyze" to get AI-powered suggestions',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey.shade500,
-                                ),
-                              ),
-                            ],
+                ? SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: _buildAnalysisResultsContent(),
+                  )
+                : Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(40),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.analytics_outlined,
+                            size: 64,
+                            color: Colors.grey.shade300,
                           ),
-                        ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No Analysis Yet',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Enter your initial diagnosis and click "Analyze" to get AI-powered suggestions',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade500,
+                            ),
+                          ),
+                        ],
                       ),
+                    ),
+                  ),
           ),
         ],
       ),
@@ -653,6 +716,16 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
       return;
     }
 
+    if (widget.selectedPatientId == null || widget.selectedPatientId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Please select a patient first'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     // Get current user (doctor)
     final currentUser = Supabase.instance.client.auth.currentUser;
     if (currentUser == null) {
@@ -675,23 +748,6 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
     );
 
     try {
-      // Prepare patient data
-      final patient = PatientData(
-        name: _nameController.text.trim(),
-        age: _ageController.text.isNotEmpty
-            ? int.tryParse(_ageController.text)
-            : null,
-        gender: _genderController.text.isNotEmpty
-            ? _genderController.text.trim()
-            : null,
-        allergies: _allergiesController.text.isNotEmpty
-            ? _allergiesController.text.trim()
-            : null,
-        contactInfo: _contactController.text.isNotEmpty
-            ? _contactController.text.trim()
-            : null,
-      );
-
       // Prepare vital signs
       final vitalSigns = VitalSigns(
         temperature: _temperatureController.text.isNotEmpty
@@ -720,13 +776,29 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
       // Save encounter
       final response = await _encounterService.saveEncounter(
         doctorId: currentUser.id,
-        patient: patient,
+        patientId: widget.selectedPatientId!,
         chiefComplaint: _complaintController.text.trim(),
         historyOfIllness: _historyController.text.trim(),
         vitalSigns: vitalSigns,
         physicalExam: _examinationController.text.trim(),
         diagnosis: _diagnosisController.text.trim(),
+        medications: _medicationController.text.trim(),
       );
+
+      // Save allergies if they were modified
+      if (_allergiesController.text.trim() !=
+          (widget.selectedPatientDetails?.allergies ?? '')) {
+        try {
+          await _encounterService.updatePatientAllergies(
+            patientId: widget.selectedPatientId!,
+            allergies: _allergiesController.text.trim(),
+          );
+          print('✅ Patient allergies updated successfully');
+        } catch (e) {
+          print('⚠️ Warning: Failed to update allergies: $e');
+          // Don't stop the flow if allergies update fails
+        }
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -742,7 +814,7 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
       }
     } catch (e) {
       print('Error saving encounter: $e');
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -788,9 +860,7 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
 
       // Call API
       final response = await _encounterService.analyzeEncounter(
-        patientId: _nameController.text.isNotEmpty
-            ? _nameController.text
-            : 'Unknown Patient',
+        patientId: widget.selectedPatientName ?? 'Unknown Patient',
         diagnosis: _diagnosisController.text,
         symptoms: _complaintController.text.isNotEmpty
             ? _complaintController.text
@@ -798,6 +868,9 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
         vitalSigns: vitalSigns,
         examinationFindings: _examinationController.text.isNotEmpty
             ? _examinationController.text
+            : null,
+        medications: _medicationController.text.isNotEmpty
+            ? _medicationController.text
             : null,
       );
 
@@ -817,7 +890,7 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
       }
     } catch (e) {
       print('Error analyzing diagnosis: $e');
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -870,13 +943,14 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
             ),
           ),
           const SizedBox(height: 12),
-          ..._analysisResults!.missedDiagnoses.map((diagnosis) =>
-              _buildSuggestionCard(
-                title: diagnosis.title,
-                description: diagnosis.description,
-                badge: diagnosis.confidence,
-                color: Colors.orange,
-              )),
+          ..._analysisResults!.missedDiagnoses.map(
+            (diagnosis) => _buildSuggestionCard(
+              title: diagnosis.title,
+              description: diagnosis.description,
+              badge: diagnosis.confidence,
+              color: Colors.orange,
+            ),
+          ),
           const SizedBox(height: 20),
         ],
 
@@ -891,13 +965,14 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
             ),
           ),
           const SizedBox(height: 12),
-          ..._analysisResults!.potentialIssues.map((issue) =>
-              _buildSuggestionCard(
-                title: issue.title,
-                description: issue.description,
-                badge: issue.severity,
-                color: Colors.red,
-              )),
+          ..._analysisResults!.potentialIssues.map(
+            (issue) => _buildSuggestionCard(
+              title: issue.title,
+              description: issue.description,
+              badge: issue.severity,
+              color: Colors.red,
+            ),
+          ),
           const SizedBox(height: 20),
         ],
 
@@ -912,13 +987,14 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
             ),
           ),
           const SizedBox(height: 12),
-          ..._analysisResults!.recommendedTests.map((test) =>
-              _buildSuggestionCard(
-                title: test.title,
-                description: test.description,
-                badge: test.priority,
-                color: Colors.blue,
-              )),
+          ..._analysisResults!.recommendedTests.map(
+            (test) => _buildSuggestionCard(
+              title: test.title,
+              description: test.description,
+              badge: test.priority,
+              color: Colors.blue,
+            ),
+          ),
         ],
       ],
     );
@@ -995,10 +1071,7 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF059669),
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 8,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),

@@ -15,6 +15,7 @@ class AllEncountersPage extends StatefulWidget {
 class _AllEncountersPageState extends State<AllEncountersPage> {
   DateTime? _selectedDate;
   String? _selectedPatientFilter;
+  final Map<String, bool> _expandedCases = {}; // Track expanded cases
 
   // Store uploaded files for each encounter
   final Map<String, List<Map<String, String>>> _encounterFiles = {};
@@ -23,6 +24,8 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
   final List<Map<String, dynamic>> _allEncounters = [
     {
       'id': '001',
+      'case_id': 'CASE-001',
+      'visit_number': 1,
       'patient': 'John Doe - MRN: 12345',
       'date': DateTime(2025, 12, 18, 10, 30),
       'complaint': 'Persistent cough and fever',
@@ -33,7 +36,22 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
       'treatment': 'Prescribed antibiotics and rest',
     },
     {
+      'id': '001-2',
+      'case_id': 'CASE-001',
+      'visit_number': 2,
+      'patient': 'John Doe - MRN: 12345',
+      'date': DateTime(2025, 12, 20, 14, 15),
+      'complaint': 'Follow-up: cough improving',
+      'diagnosis': 'Acute bronchitis - improving',
+      'temperature': '99.8',
+      'bloodPressure': '118/78',
+      'heartRate': '80',
+      'treatment': 'Continue antibiotics',
+    },
+    {
       'id': '002',
+      'case_id': 'CASE-002',
+      'visit_number': 1,
       'patient': 'Jane Smith - MRN: 12346',
       'date': DateTime(2025, 12, 17, 14, 15),
       'complaint': 'Headache and dizziness',
@@ -45,6 +63,8 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
     },
     {
       'id': '003',
+      'case_id': 'CASE-003',
+      'visit_number': 1,
       'patient': 'Robert Johnson - MRN: 12347',
       'date': DateTime(2025, 12, 16, 9, 0),
       'complaint': 'Chest pain',
@@ -56,6 +76,8 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
     },
     {
       'id': '004',
+      'case_id': 'CASE-004',
+      'visit_number': 1,
       'patient': 'Emily Davis - MRN: 12348',
       'date': DateTime(2025, 12, 15, 16, 45),
       'complaint': 'Allergic reaction',
@@ -67,6 +89,8 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
     },
     {
       'id': '005',
+      'case_id': 'CASE-005',
+      'visit_number': 1,
       'patient': 'Michael Brown - MRN: 12349',
       'date': DateTime(2025, 12, 14, 11, 20),
       'complaint': 'Back pain',
@@ -99,6 +123,28 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
     }
 
     return filtered;
+  }
+
+  // Group encounters by case_id
+  Map<String, List<Map<String, dynamic>>> get _groupedEncounters {
+    final Map<String, List<Map<String, dynamic>>> grouped = {};
+
+    for (var encounter in _filteredEncounters) {
+      final caseId = encounter['case_id'] ?? 'UNKNOWN';
+      if (!grouped.containsKey(caseId)) {
+        grouped[caseId] = [];
+      }
+      grouped[caseId]!.add(encounter);
+    }
+
+    // Sort visits within each case
+    grouped.forEach((caseId, visits) {
+      visits.sort(
+        (a, b) => (a['visit_number'] ?? 0).compareTo(b['visit_number'] ?? 0),
+      );
+    });
+
+    return grouped;
   }
 
   Future<Map<String, String>?> _uploadFile(String encounterId) async {
@@ -693,7 +739,7 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
                     ),
                   ],
                 ),
-                child: _filteredEncounters.isEmpty
+                child: _groupedEncounters.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -716,12 +762,14 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
                       )
                     : ListView.separated(
                         padding: const EdgeInsets.all(16),
-                        itemCount: _filteredEncounters.length,
+                        itemCount: _groupedEncounters.length,
                         separatorBuilder: (context, index) =>
                             const SizedBox(height: 12),
                         itemBuilder: (context, index) {
-                          final encounter = _filteredEncounters[index];
-                          return _buildEncounterCard(encounter);
+                          final caseId = _groupedEncounters.keys
+                              .toList()[index];
+                          final visits = _groupedEncounters[caseId]!;
+                          return _buildCaseCard(caseId, visits);
                         },
                       ),
               ),
@@ -732,33 +780,175 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
     );
   }
 
-  Widget _buildEncounterCard(Map<String, dynamic> encounter) {
+  Widget _buildCaseCard(String caseId, List<Map<String, dynamic>> visits) {
+    final isExpanded = _expandedCases[caseId] ?? false;
+    final firstVisit = visits.first;
+    final visitCount = visits.length;
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          // Case Header (always visible)
+          InkWell(
+            onTap: () {
+              setState(() {
+                _expandedCases[caseId] = !isExpanded;
+              });
+            },
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  // Icon
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2563EB).withAlpha(25),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      isExpanded ? Icons.expand_less : Icons.expand_more,
+                      color: const Color(0xFF2563EB),
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  // Details
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              'Case: $caseId',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF1E293B),
+                              ),
+                            ),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2563EB).withAlpha(25),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '$visitCount visit${visitCount > 1 ? 's' : ''}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xFF2563EB),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.person,
+                              size: 14,
+                              color: Colors.grey.shade600,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              firstVisit['patient'],
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          firstVisit['complaint'],
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                            fontStyle: FontStyle.italic,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Arrow indicator
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    size: 16,
+                    color: Colors.grey.shade400,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Sub-encounters (visits) - shown when expanded
+          if (isExpanded) ...[
+            Container(height: 1, color: Colors.grey.shade200),
+            ...visits.asMap().entries.map((entry) {
+              final visitIndex = entry.key;
+              final visit = entry.value;
+              return _buildVisitTile(visit, visitIndex, visits);
+            }).toList(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVisitTile(
+    Map<String, dynamic> visit,
+    int visitIndex,
+    List<Map<String, dynamic>> allVisits,
+  ) {
     return InkWell(
-      onTap: () => _showEncounterDetails(encounter),
-      borderRadius: BorderRadius.circular(8),
+      onTap: () => _showEncounterDetails(visit),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade200),
-          borderRadius: BorderRadius.circular(8),
+          color: Colors.grey.shade50,
+          border: visitIndex < allVisits.length - 1
+              ? Border(bottom: BorderSide(color: Colors.grey.shade200))
+              : null,
         ),
         child: Row(
           children: [
-            // Icon
+            // Visit Number Badge
             Container(
-              padding: const EdgeInsets.all(12),
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
-                color: const Color(0xFF2563EB).withAlpha(25),
-                borderRadius: BorderRadius.circular(8),
+                color: const Color(0xFF059669).withAlpha(25),
+                borderRadius: BorderRadius.circular(50),
               ),
-              child: const Icon(
-                Icons.description_outlined,
-                color: Color(0xFF2563EB),
-                size: 24,
+              child: Center(
+                child: Text(
+                  'V${visit['visit_number'] ?? visitIndex + 1}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF059669),
+                  ),
+                ),
               ),
             ),
-            const SizedBox(width: 16),
-            // Details
+            const SizedBox(width: 12),
+            // Visit Details
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -766,61 +956,18 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
                   Row(
                     children: [
                       Text(
-                        'Encounter #${encounter['id']}',
+                        'Visit #${visit['visit_number'] ?? 1}',
                         style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
                           color: Color(0xFF1E293B),
                         ),
                       ),
                       const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF059669).withAlpha(25),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          'Completed',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: Color(0xFF059669),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Icon(Icons.person, size: 14, color: Colors.grey.shade600),
-                      const SizedBox(width: 4),
                       Text(
-                        encounter['patient'],
+                        _formatDateTime(visit['date']),
                         style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.access_time,
-                        size: 14,
-                        color: Colors.grey.shade600,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _formatDateTime(encounter['date']),
-                        style: TextStyle(
-                          fontSize: 13,
+                          fontSize: 12,
                           color: Colors.grey.shade600,
                         ),
                       ),
@@ -828,12 +975,8 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    encounter['complaint'],
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade600,
-                      fontStyle: FontStyle.italic,
-                    ),
+                    'Diagnosis: ${visit['diagnosis']}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -841,12 +984,7 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
               ),
             ),
             const SizedBox(width: 12),
-            // Arrow
-            Icon(
-              Icons.arrow_forward_ios,
-              size: 16,
-              color: Colors.grey.shade400,
-            ),
+            Icon(Icons.chevron_right, size: 20, color: Colors.grey.shade400),
           ],
         ),
       ),

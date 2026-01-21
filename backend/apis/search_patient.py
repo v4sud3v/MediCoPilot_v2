@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from supabase import create_client
 import os
 from typing import List, Optional
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/search", tags=["Search"])
 
@@ -13,6 +14,10 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     raise ValueError("SUPABASE_URL or SUPABASE_SECRET_KEY not set")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+class UpdateAllergiesRequest(BaseModel):
+    allergies: Optional[str] = None
 
 
 class PatientSearchResult:
@@ -110,4 +115,36 @@ async def get_patient_details(patient_id: str) -> dict:
         return response.data
     except Exception as e:
         print(f"Error fetching patient: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/patients/{patient_id}/allergies", tags=["Search"])
+async def update_patient_allergies(patient_id: str, request: UpdateAllergiesRequest) -> dict:
+    """
+    Update patient allergies by ID.
+    
+    Args:
+        patient_id: The patient ID (UUID)
+        request: UpdateAllergiesRequest with allergies text
+    
+    Returns:
+        Updated patient record
+    """
+    
+    try:
+        update_data = {"allergies": request.allergies}
+        
+        response = supabase.table("patients").update(
+            update_data
+        ).eq("id", patient_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Patient not found")
+        
+        return {
+            "success": True,
+            "message": "Allergies updated successfully",
+            "patient_id": patient_id,
+        }
+    except Exception as e:
+        print(f"Error updating patient allergies: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -54,6 +54,7 @@ Symptoms: {request.symptoms}
 Current Diagnosis: {request.diagnosis}
 Vital Signs: {vital_signs_text}
 Physical Examination: {request.examination_findings or 'Not provided'}
+Current Medications: {request.medications or 'Not provided'}
 
 Provide your analysis in this format:
 
@@ -62,6 +63,7 @@ MISSED DIAGNOSES:
 
 POTENTIAL ISSUES:
 - [Issue name]: [Description] | Severity: [High/Medium/Low]
+- Consider medication interactions and contraindications
 
 RECOMMENDED TESTS:
 - [Test name]: [Description] | Priority: [High/Medium/Low]

@@ -149,32 +149,6 @@ class AnalysisResponse {
   }
 }
 
-class PatientData {
-  final String name;
-  final int? age;
-  final String? gender;
-  final String? allergies;
-  final String? contactInfo;
-
-  PatientData({
-    required this.name,
-    this.age,
-    this.gender,
-    this.allergies,
-    this.contactInfo,
-  });
-
-  Map<String, dynamic> toJson() {
-    return {
-      'name': name,
-      if (age != null) 'age': age,
-      if (gender != null) 'gender': gender,
-      if (allergies != null) 'allergies': allergies,
-      if (contactInfo != null) 'contact_info': contactInfo,
-    };
-  }
-}
-
 class SaveEncounterResponse {
   final bool success;
   final String encounterId;
@@ -230,6 +204,35 @@ class PatientSearchResult {
   }
 }
 
+class PatientDetails {
+  final String id;
+  final String name;
+  final int? age;
+  final String? gender;
+  final String? allergies;
+  final String? contactInfo;
+
+  PatientDetails({
+    required this.id,
+    required this.name,
+    this.age,
+    this.gender,
+    this.allergies,
+    this.contactInfo,
+  });
+
+  factory PatientDetails.fromJson(Map<String, dynamic> json) {
+    return PatientDetails(
+      id: json['id'] ?? '',
+      name: json['name'] ?? '',
+      age: json['age'],
+      gender: json['gender'],
+      allergies: json['allergies'],
+      contactInfo: json['contact_info'],
+    );
+  }
+}
+
 class EncounterService {
   final String baseUrl = ApiConfig.baseUrl;
 
@@ -271,7 +274,7 @@ class EncounterService {
     }
   }
 
-  Future<PatientSearchResult> getPatientDetails(String patientId) async {
+  Future<PatientDetails> getPatientDetails(String patientId) async {
     try {
       final url = Uri.parse('$baseUrl/search/patients/$patientId');
 
@@ -291,7 +294,7 @@ class EncounterService {
 
       if (response.statusCode == 200) {
         final jsonData = jsonDecode(response.body);
-        return PatientSearchResult.fromJson(jsonData);
+        return PatientDetails.fromJson(jsonData);
       } else {
         throw Exception('Failed to fetch patient details: ${response.statusCode}');
       }
@@ -303,19 +306,20 @@ class EncounterService {
 
   Future<SaveEncounterResponse> saveEncounter({
     required String doctorId,
-    required PatientData patient,
+    required String patientId,
     String? chiefComplaint,
     String? historyOfIllness,
     required VitalSigns vitalSigns,
     String? physicalExam,
     String? diagnosis,
+    String? medications,
   }) async {
     try {
       final url = Uri.parse('$baseUrl/encounter/save');
       
       final requestBody = {
         'doctor_id': doctorId,
-        'patient': patient.toJson(),
+        'patient_id': patientId,
         if (chiefComplaint != null && chiefComplaint.isNotEmpty)
           'chief_complaint': chiefComplaint,
         if (historyOfIllness != null && historyOfIllness.isNotEmpty)
@@ -324,6 +328,7 @@ class EncounterService {
         if (physicalExam != null && physicalExam.isNotEmpty)
           'physical_exam': physicalExam,
         if (diagnosis != null && diagnosis.isNotEmpty) 'diagnosis': diagnosis,
+        if (medications != null && medications.isNotEmpty) 'medications': medications,
       };
 
       print('🔵 Sending save request to: $url');
@@ -361,6 +366,7 @@ class EncounterService {
     required String symptoms,
     required VitalSigns vitalSigns,
     String? examinationFindings,
+    String? medications,
   }) async {
     try {
       final url = Uri.parse('$baseUrl/analysis/encounter');
@@ -372,6 +378,8 @@ class EncounterService {
         'vital_signs': vitalSigns.toJson(),
         if (examinationFindings != null && examinationFindings.isNotEmpty)
           'examination_findings': examinationFindings,
+        if (medications != null && medications.isNotEmpty)
+          'medications': medications,
       };
 
       print('🔵 Sending request to: $url');
@@ -399,6 +407,46 @@ class EncounterService {
       }
     } catch (e) {
       print('❌ Error in analyzeEncounter: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> updatePatientAllergies({
+    required String patientId,
+    String? allergies,
+  }) async {
+    try {
+      final url = Uri.parse('$baseUrl/search/patients/$patientId/allergies');
+      
+      final requestBody = {
+        'allergies': allergies,
+      };
+
+      print('🔵 Updating patient allergies: $url');
+      print('📤 Request body: ${jsonEncode(requestBody)}');
+
+      final response = await http.patch(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(requestBody),
+      ).timeout(
+        const Duration(seconds: 10),
+      );
+
+      print('📥 Update response status: ${response.statusCode}');
+      print('📥 Update response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body);
+        return jsonData;
+      } else {
+        throw Exception('Failed to update allergies: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      print('❌ Error in updatePatientAllergies: $e');
       rethrow;
     }
   }
