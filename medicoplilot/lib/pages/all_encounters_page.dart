@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:medicoplilot/pages/encounter_details_page.dart';
+import 'package:medicoplilot/services/encounter_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:path_provider/path_provider.dart';
@@ -20,94 +22,75 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
   // Store uploaded files for each encounter
   final Map<String, List<Map<String, String>>> _encounterFiles = {};
 
-  // Sample encounter data - replace with your actual data source
-  final List<Map<String, dynamic>> _allEncounters = [
-    {
-      'id': '001',
-      'case_id': 'CASE-001',
-      'visit_number': 1,
-      'patient': 'John Doe - MRN: 12345',
-      'date': DateTime(2025, 12, 18, 10, 30),
-      'complaint': 'Persistent cough and fever',
-      'diagnosis': 'Acute bronchitis',
-      'temperature': '101.5',
-      'bloodPressure': '120/80',
-      'heartRate': '88',
-      'treatment': 'Prescribed antibiotics and rest',
-    },
-    {
-      'id': '001-2',
-      'case_id': 'CASE-001',
-      'visit_number': 2,
-      'patient': 'John Doe - MRN: 12345',
-      'date': DateTime(2025, 12, 20, 14, 15),
-      'complaint': 'Follow-up: cough improving',
-      'diagnosis': 'Acute bronchitis - improving',
-      'temperature': '99.8',
-      'bloodPressure': '118/78',
-      'heartRate': '80',
-      'treatment': 'Continue antibiotics',
-    },
-    {
-      'id': '002',
-      'case_id': 'CASE-002',
-      'visit_number': 1,
-      'patient': 'Jane Smith - MRN: 12346',
-      'date': DateTime(2025, 12, 17, 14, 15),
-      'complaint': 'Headache and dizziness',
-      'diagnosis': 'Migraine',
-      'temperature': '98.6',
-      'bloodPressure': '118/75',
-      'heartRate': '72',
-      'treatment': 'Pain management and lifestyle modifications',
-    },
-    {
-      'id': '003',
-      'case_id': 'CASE-003',
-      'visit_number': 1,
-      'patient': 'Robert Johnson - MRN: 12347',
-      'date': DateTime(2025, 12, 16, 9, 0),
-      'complaint': 'Chest pain',
-      'diagnosis': 'Anxiety-related chest pain',
-      'temperature': '98.4',
-      'bloodPressure': '130/85',
-      'heartRate': '95',
-      'treatment': 'Referred to cardiology for evaluation',
-    },
-    {
-      'id': '004',
-      'case_id': 'CASE-004',
-      'visit_number': 1,
-      'patient': 'Emily Davis - MRN: 12348',
-      'date': DateTime(2025, 12, 15, 16, 45),
-      'complaint': 'Allergic reaction',
-      'diagnosis': 'Seasonal allergies',
-      'temperature': '98.2',
-      'bloodPressure': '115/70',
-      'heartRate': '68',
-      'treatment': 'Antihistamines prescribed',
-    },
-    {
-      'id': '005',
-      'case_id': 'CASE-005',
-      'visit_number': 1,
-      'patient': 'Michael Brown - MRN: 12349',
-      'date': DateTime(2025, 12, 14, 11, 20),
-      'complaint': 'Back pain',
-      'diagnosis': 'Muscle strain',
-      'temperature': '98.6',
-      'bloodPressure': '125/82',
-      'heartRate': '75',
-      'treatment': 'Physical therapy recommended',
-    },
-  ];
+  // Services
+  final _encounterService = EncounterService();
+
+  // API data
+  List<Map<String, dynamic>> _allEncounters = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEncounters();
+  }
+
+  Future<void> _loadEncounters() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+
+      // Get current user (doctor)
+      final currentUser = Supabase.instance.client.auth.currentUser;
+      if (currentUser == null) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _errorMessage = 'You must be logged in to view encounters';
+          });
+        }
+        return;
+      }
+
+      // Fetch encounters for the logged-in doctor
+      final encounters = await _encounterService.getEncountersForDoctor(
+        currentUser.id,
+      );
+
+      if (mounted) {
+        setState(() {
+          _allEncounters = encounters;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading encounters: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Failed to load encounters: ${e.toString()}';
+        });
+      }
+    }
+  }
 
   List<Map<String, dynamic>> get _filteredEncounters {
     var filtered = _allEncounters;
 
     if (_selectedDate != null) {
       filtered = filtered.where((encounter) {
-        final date = encounter['date'] as DateTime;
+        final createdAt = encounter['created_at'];
+        DateTime date;
+        if (createdAt is String) {
+          date = DateTime.parse(createdAt);
+        } else if (createdAt is DateTime) {
+          date = createdAt;
+        } else {
+          return false;
+        }
         return date.year == _selectedDate!.year &&
             date.month == _selectedDate!.month &&
             date.day == _selectedDate!.day;
@@ -116,9 +99,9 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
 
     if (_selectedPatientFilter != null) {
       filtered = filtered.where((encounter) {
-        return encounter['patient'].toString().toLowerCase().contains(
-          _selectedPatientFilter!.toLowerCase(),
-        );
+        final patientName =
+            encounter['patient_name']?.toString().toLowerCase() ?? '';
+        return patientName.contains(_selectedPatientFilter!.toLowerCase());
       }).toList();
     }
 
@@ -529,8 +512,22 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
     );
   }
 
-  String _formatDateTime(DateTime date) {
-    return '${date.day}/${date.month}/${date.year} at ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  String _formatDateTime(dynamic date) {
+    DateTime dateTime;
+
+    if (date is String) {
+      try {
+        dateTime = DateTime.parse(date);
+      } catch (e) {
+        return 'Invalid date';
+      }
+    } else if (date is DateTime) {
+      dateTime = date;
+    } else {
+      return 'Invalid date';
+    }
+
+    return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 
   String _formatDate(DateTime date) {
@@ -739,7 +736,63 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
                     ),
                   ],
                 ),
-                child: _groupedEncounters.isEmpty
+                child: _isLoading
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const SizedBox(
+                              width: 60,
+                              height: 60,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: Color(0xFF2563EB),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Loading encounters...',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : _errorMessage != null
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              size: 64,
+                              color: Colors.red.shade400,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              _errorMessage!,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.red.shade600,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              onPressed: _loadEncounters,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Retry'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF2563EB),
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : _groupedEncounters.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -864,7 +917,7 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              firstVisit['patient'],
+                              firstVisit['patient_name'] ?? 'Unknown',
                               style: TextStyle(
                                 fontSize: 14,
                                 color: Colors.grey.shade700,
@@ -874,7 +927,7 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          firstVisit['complaint'],
+                          firstVisit['chief_complaint'] ?? 'No complaint',
                           style: TextStyle(
                             fontSize: 13,
                             color: Colors.grey.shade600,
@@ -965,7 +1018,7 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
                       ),
                       const Spacer(),
                       Text(
-                        _formatDateTime(visit['date']),
+                        _formatDateTime(visit['created_at']),
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade600,
@@ -975,7 +1028,7 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Diagnosis: ${visit['diagnosis']}',
+                    'Diagnosis: ${visit['diagnosis'] ?? 'Not specified'}',
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

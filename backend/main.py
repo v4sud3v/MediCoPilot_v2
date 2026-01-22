@@ -4,6 +4,7 @@ from apis.auth import router as auth_router
 from apis.analyze_encounter import router as analysis_router
 from apis.save_encounter import router as save_encounter_router
 from apis.search_patient import router as search_router
+from apis.encounters import router as encounters_router
 
 app = FastAPI(
     title="MediCoPilot API",
@@ -25,6 +26,7 @@ app.include_router(auth_router)
 app.include_router(analysis_router)
 app.include_router(save_encounter_router)
 app.include_router(search_router)
+app.include_router(encounters_router)
 
 
 @app.get("/", tags=["Health"])

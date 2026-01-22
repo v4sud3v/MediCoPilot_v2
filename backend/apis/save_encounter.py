@@ -21,11 +21,16 @@ async def save_encounter(request: SaveEncounterRequest) -> SaveEncounterResponse
     """
     Save a new patient encounter to the database.
     
+    Modes:
+    - New Encounter: case_id NOT provided → generate new case_id, visit_number = 1
+    - Follow-up: case_id provided → use existing case_id, auto-increment visit_number
+    
     Steps:
     1. Fetch existing patient by patient_id
-    2. Get the latest encounter for this patient to determine case_id and visit_number
-    3. Create encounter record with appropriate visit_number
-    4. Return encounter details
+    2. Determine case_id and visit_number based on mode
+    3. If follow-up, inherit history_of_illness from parent encounter
+    4. Create encounter record with appropriate visit_number
+    5. Return encounter details
     """
     
     try:
@@ -38,23 +43,33 @@ async def save_encounter(request: SaveEncounterRequest) -> SaveEncounterResponse
             raise HTTPException(status_code=404, detail="Patient not found")
         
         patient_id = request.patient_id
+        patient_allergies = patient_result.data[0].get('allergies', '')
         
-        # Step 2: Get the latest encounter for this patient
+        # Step 2: Determine case_id and visit_number based on mode
         case_id = None
         visit_number = 1
+        history_of_illness = request.history_of_illness
         
-        latest_encounter = supabase.table('encounters').select(
-            'case_id, visit_number'
-        ).eq('patient_id', patient_id).order(
-            'visit_number', desc=True
-        ).limit(1).execute()
-        
-        if latest_encounter.data and len(latest_encounter.data) > 0:
-            # Continuing existing case
-            case_id = latest_encounter.data[0]['case_id']
-            visit_number = latest_encounter.data[0]['visit_number'] + 1
+        if request.case_id:
+            # Follow-up mode: use provided case_id and increment visit_number
+            case_id = request.case_id
+            
+            # Get the latest visit in this case
+            latest_visit = supabase.table('encounters').select(
+                'visit_number, history_of_illness'
+            ).eq('case_id', case_id).order(
+                'visit_number', desc=True
+            ).limit(1).execute()
+            
+            if latest_visit.data and len(latest_visit.data) > 0:
+                visit_number = latest_visit.data[0]['visit_number'] + 1
+                # Inherit history_of_illness from parent if not provided
+                if not history_of_illness:
+                    history_of_illness = latest_visit.data[0].get('history_of_illness', '')
+            else:
+                raise HTTPException(status_code=404, detail="Parent case not found")
         else:
-            # First encounter for this patient
+            # New encounter mode: generate new case_id
             case_id = str(uuid.uuid4())
             visit_number = 1
         
@@ -65,7 +80,7 @@ async def save_encounter(request: SaveEncounterRequest) -> SaveEncounterResponse
             'case_id': case_id,
             'visit_number': visit_number,
             'chief_complaint': request.chief_complaint,
-            'history_of_illness': request.history_of_illness,
+            'history_of_illness': history_of_illness,
             'temperature': request.vital_signs.temperature,
             'blood_pressure': request.vital_signs.blood_pressure,
             'heart_rate': int(request.vital_signs.heart_rate) if request.vital_signs.heart_rate else None,

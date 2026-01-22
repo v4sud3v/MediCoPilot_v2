@@ -107,15 +107,18 @@ class AnalysisResponse {
 
   factory AnalysisResponse.fromJson(Map<String, dynamic> json) {
     return AnalysisResponse(
-      missedDiagnoses: (json['missedDiagnoses'] as List?)
+      missedDiagnoses:
+          (json['missedDiagnoses'] as List?)
               ?.map((e) => MissedDiagnosis.fromJson(e))
               .toList() ??
           [],
-      potentialIssues: (json['potentialIssues'] as List?)
+      potentialIssues:
+          (json['potentialIssues'] as List?)
               ?.map((e) => PotentialIssue.fromJson(e))
               .toList() ??
           [],
-      recommendedTests: (json['recommendedTests'] as List?)
+      recommendedTests:
+          (json['recommendedTests'] as List?)
               ?.map((e) => RecommendedTest.fromJson(e))
               .toList() ??
           [],
@@ -125,25 +128,31 @@ class AnalysisResponse {
   Map<String, dynamic> toJson() {
     return {
       'missedDiagnoses': missedDiagnoses
-          .map((e) => {
-                'title': e.title,
-                'description': e.description,
-                'confidence': e.confidence,
-              })
+          .map(
+            (e) => {
+              'title': e.title,
+              'description': e.description,
+              'confidence': e.confidence,
+            },
+          )
           .toList(),
       'potentialIssues': potentialIssues
-          .map((e) => {
-                'title': e.title,
-                'description': e.description,
-                'severity': e.severity,
-              })
+          .map(
+            (e) => {
+              'title': e.title,
+              'description': e.description,
+              'severity': e.severity,
+            },
+          )
           .toList(),
       'recommendedTests': recommendedTests
-          .map((e) => {
-                'title': e.title,
-                'description': e.description,
-                'priority': e.priority,
-              })
+          .map(
+            (e) => {
+              'title': e.title,
+              'description': e.description,
+              'priority': e.priority,
+            },
+          )
           .toList(),
     };
   }
@@ -247,15 +256,15 @@ class EncounterService {
 
       print('🔵 Searching patients: $url');
 
-      final response = await http.get(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      ).timeout(
-        const Duration(seconds: 10),
-      );
+      final response = await http
+          .get(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 10));
 
       print('📥 Search response status: ${response.statusCode}');
       print('📥 Search response body: ${response.body}');
@@ -280,15 +289,15 @@ class EncounterService {
 
       print('🔵 Fetching patient details: $url');
 
-      final response = await http.get(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      ).timeout(
-        const Duration(seconds: 10),
-      );
+      final response = await http
+          .get(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 10));
 
       print('📥 Patient details response status: ${response.statusCode}');
 
@@ -296,7 +305,9 @@ class EncounterService {
         final jsonData = jsonDecode(response.body);
         return PatientDetails.fromJson(jsonData);
       } else {
-        throw Exception('Failed to fetch patient details: ${response.statusCode}');
+        throw Exception(
+          'Failed to fetch patient details: ${response.statusCode}',
+        );
       }
     } catch (e) {
       print('❌ Error in getPatientDetails: $e');
@@ -307,6 +318,8 @@ class EncounterService {
   Future<SaveEncounterResponse> saveEncounter({
     required String doctorId,
     required String patientId,
+    String?
+    caseId, // If provided, creates follow-up; if null, creates new encounter
     String? chiefComplaint,
     String? historyOfIllness,
     required VitalSigns vitalSigns,
@@ -316,10 +329,11 @@ class EncounterService {
   }) async {
     try {
       final url = Uri.parse('$baseUrl/encounter/save');
-      
+
       final requestBody = {
         'doctor_id': doctorId,
         'patient_id': patientId,
+        if (caseId != null && caseId.isNotEmpty) 'case_id': caseId,
         if (chiefComplaint != null && chiefComplaint.isNotEmpty)
           'chief_complaint': chiefComplaint,
         if (historyOfIllness != null && historyOfIllness.isNotEmpty)
@@ -328,22 +342,23 @@ class EncounterService {
         if (physicalExam != null && physicalExam.isNotEmpty)
           'physical_exam': physicalExam,
         if (diagnosis != null && diagnosis.isNotEmpty) 'diagnosis': diagnosis,
-        if (medications != null && medications.isNotEmpty) 'medications': medications,
+        if (medications != null && medications.isNotEmpty)
+          'medications': medications,
       };
 
       print('🔵 Sending save request to: $url');
       print('📤 Request body: ${jsonEncode(requestBody)}');
 
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode(requestBody),
-      ).timeout(
-        const Duration(seconds: 30),
-      );
+      final response = await http
+          .post(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode(requestBody),
+          )
+          .timeout(const Duration(seconds: 30));
 
       print('📥 Save response status: ${response.statusCode}');
       print('📥 Save response body: ${response.body}');
@@ -352,7 +367,9 @@ class EncounterService {
         final jsonData = jsonDecode(response.body);
         return SaveEncounterResponse.fromJson(jsonData);
       } else {
-        throw Exception('Failed to save encounter: ${response.statusCode} - ${response.body}');
+        throw Exception(
+          'Failed to save encounter: ${response.statusCode} - ${response.body}',
+        );
       }
     } catch (e) {
       print('❌ Error in saveEncounter: $e');
@@ -370,7 +387,7 @@ class EncounterService {
   }) async {
     try {
       final url = Uri.parse('$baseUrl/analysis/encounter');
-      
+
       final requestBody = {
         'patient_id': patientId,
         'diagnosis': diagnosis,
@@ -385,16 +402,18 @@ class EncounterService {
       print('🔵 Sending request to: $url');
       print('📤 Request body: ${jsonEncode(requestBody)}');
 
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode(requestBody),
-      ).timeout(
-        const Duration(minutes: 5), // Local LLM can take 2-3 minutes
-      );
+      final response = await http
+          .post(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode(requestBody),
+          )
+          .timeout(
+            const Duration(minutes: 5), // Local LLM can take 2-3 minutes
+          );
 
       print('📥 Response status: ${response.statusCode}');
       print('📥 Response body: ${response.body}');
@@ -403,7 +422,9 @@ class EncounterService {
         final jsonData = jsonDecode(response.body);
         return AnalysisResponse.fromJson(jsonData);
       } else {
-        throw Exception('Failed to analyze encounter: ${response.statusCode} - ${response.body}');
+        throw Exception(
+          'Failed to analyze encounter: ${response.statusCode} - ${response.body}',
+        );
       }
     } catch (e) {
       print('❌ Error in analyzeEncounter: $e');
@@ -417,24 +438,22 @@ class EncounterService {
   }) async {
     try {
       final url = Uri.parse('$baseUrl/search/patients/$patientId/allergies');
-      
-      final requestBody = {
-        'allergies': allergies,
-      };
+
+      final requestBody = {'allergies': allergies};
 
       print('🔵 Updating patient allergies: $url');
       print('📤 Request body: ${jsonEncode(requestBody)}');
 
-      final response = await http.patch(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode(requestBody),
-      ).timeout(
-        const Duration(seconds: 10),
-      );
+      final response = await http
+          .patch(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode(requestBody),
+          )
+          .timeout(const Duration(seconds: 10));
 
       print('📥 Update response status: ${response.statusCode}');
       print('📥 Update response body: ${response.body}');
@@ -443,10 +462,111 @@ class EncounterService {
         final jsonData = jsonDecode(response.body);
         return jsonData;
       } else {
-        throw Exception('Failed to update allergies: ${response.statusCode} - ${response.body}');
+        throw Exception(
+          'Failed to update allergies: ${response.statusCode} - ${response.body}',
+        );
       }
     } catch (e) {
       print('❌ Error in updatePatientAllergies: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getEncountersForDoctor(
+    String doctorId, {
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    try {
+      final url = Uri.parse(
+        '$baseUrl/encounters/doctor/$doctorId?limit=$limit&offset=$offset',
+      );
+
+      print('🔵 Fetching encounters for doctor $doctorId: $url');
+
+      final response = await http
+          .get(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 30));
+
+      print('📥 Get encounters response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonData = jsonDecode(response.body);
+        return jsonData
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+      } else {
+        throw Exception('Failed to fetch encounters: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('❌ Error in getEncountersForDoctor: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> getEncounterById(String encounterId) async {
+    try {
+      final url = Uri.parse('$baseUrl/encounters/$encounterId');
+
+      print('🔵 Fetching encounter by ID: $url');
+
+      final response = await http
+          .get(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 30));
+
+      print('📥 Get encounter by ID response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+      } else {
+        throw Exception('Failed to fetch encounter: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('❌ Error in getEncounterById: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getVisitsInCase(String caseId) async {
+    try {
+      final url = Uri.parse('$baseUrl/encounters/case/$caseId');
+
+      print('🔵 Fetching visits in case: $url');
+
+      final response = await http
+          .get(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 30));
+
+      print('📥 Get visits in case response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonData = jsonDecode(response.body);
+        return jsonData
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+      } else {
+        throw Exception('Failed to fetch case visits: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('❌ Error in getVisitsInCase: $e');
       rethrow;
     }
   }

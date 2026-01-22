@@ -44,6 +44,7 @@ CREATE TABLE public.encounters (
   height double precision,
   physical_exam text,
   diagnosis text,
+  medications text,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT encounters_pkey PRIMARY KEY (id),
   CONSTRAINT encounters_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id),

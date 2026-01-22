@@ -49,6 +49,7 @@ class AnalyzeEncounterResponse(BaseModel):
 # Save Encounter Models
 class SaveEncounterRequest(BaseModel):
     patient_id: str  # UUID of the existing patient
+    case_id: Optional[str] = None  # If provided, creates follow-up; if None, creates new encounter
     chief_complaint: Optional[str] = None
     history_of_illness: Optional[str] = None
     vital_signs: VitalSigns

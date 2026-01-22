@@ -1,5 +1,7 @@
 // Full-page Encounter Detail View
 import 'package:flutter/material.dart';
+import '../services/encounter_service.dart';
+import 'new_encounter_page.dart';
 
 class EncounterDetailPage extends StatefulWidget {
   final Map<String, dynamic> encounter;
@@ -23,15 +25,59 @@ class EncounterDetailPage extends StatefulWidget {
 
 class EncounterDetailPageState extends State<EncounterDetailPage> {
   late List<Map<String, String>> _files;
+  final _encounterService = EncounterService();
+  List<Map<String, dynamic>> _caseVisits = [];
+  bool _isLoadingVisits = false;
 
   @override
   void initState() {
     super.initState();
     _files = List.from(widget.initialEncounterFiles);
+    _loadCaseVisits();
   }
 
-  String _formatDateTime(DateTime date) {
-    return '${date.day}/${date.month}/${date.year} at ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  Future<void> _loadCaseVisits() async {
+    final caseId = widget.encounter['case_id'];
+    if (caseId == null) return;
+
+    setState(() {
+      _isLoadingVisits = true;
+    });
+
+    try {
+      final visits = await _encounterService.getVisitsInCase(caseId);
+      if (mounted) {
+        setState(() {
+          _caseVisits = visits;
+          _isLoadingVisits = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading case visits: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingVisits = false;
+        });
+      }
+    }
+  }
+
+  String _formatDateTime(dynamic date) {
+    DateTime dateTime;
+
+    if (date is String) {
+      try {
+        dateTime = DateTime.parse(date);
+      } catch (e) {
+        return 'Invalid date';
+      }
+    } else if (date is DateTime) {
+      dateTime = date;
+    } else {
+      return 'Invalid date';
+    }
+
+    return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 
   void _handleUpload() async {
@@ -134,7 +180,7 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            _formatDateTime(widget.encounter['date']),
+                            _formatDateTime(widget.encounter['created_at']),
                             style: TextStyle(
                               fontSize: 13,
                               color: Colors.grey.shade600,
@@ -143,6 +189,23 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
                         ],
                       ),
                     ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                ElevatedButton.icon(
+                  onPressed: _navigateToAddFollowup,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add Follow-up'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
               ],
@@ -160,6 +223,11 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
                     flex: 2,
                     child: Column(
                       children: [
+                        // Visit Timeline Card (if multiple visits in case)
+                        if (_caseVisits.length > 1) ...[
+                          _buildVisitTimelineCard(),
+                          const SizedBox(height: 20),
+                        ],
                         _buildInfoCard(
                           'Patient Information',
                           Icons.person_outline,
@@ -167,11 +235,15 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
                           [
                             _buildInfoRow(
                               'Patient Name',
-                              widget.encounter['patient'],
+                              widget.encounter['patient_name'] ?? 'Unknown',
                             ),
                             _buildInfoRow(
                               'Date & Time',
-                              _formatDateTime(widget.encounter['date']),
+                              _formatDateTime(widget.encounter['created_at']),
+                            ),
+                            _buildInfoRow(
+                              'Visit',
+                              'Visit ${widget.encounter['visit_number']} of ${_caseVisits.length}',
                             ),
                           ],
                         ),
@@ -184,7 +256,8 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
                             Padding(
                               padding: const EdgeInsets.only(top: 8),
                               child: Text(
-                                widget.encounter['complaint'],
+                                widget.encounter['chief_complaint'] ??
+                                    'No complaint',
                                 style: const TextStyle(
                                   fontSize: 15,
                                   height: 1.6,
@@ -202,12 +275,13 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
                           [
                             _buildInfoRow(
                               'Diagnosis',
-                              widget.encounter['diagnosis'],
+                              widget.encounter['diagnosis'] ?? 'Not specified',
                             ),
                             const SizedBox(height: 12),
                             _buildInfoRow(
                               'Treatment Plan',
-                              widget.encounter['treatment'],
+                              widget.encounter['physical_exam'] ??
+                                  'Not recorded',
                             ),
                           ],
                         ),
@@ -231,6 +305,200 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildVisitTimelineCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withAlpha(25),
+            spreadRadius: 1,
+            blurRadius: 5,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.timeline,
+                      color: Colors.purple.shade700,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Visit History',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                ],
+              ),
+              ElevatedButton.icon(
+                onPressed: _navigateToAddFollowup,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add Follow-up'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          if (_isLoadingVisits)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else
+            ..._caseVisits.asMap().entries.map((entry) {
+              final index = entry.key;
+              final visit = entry.value;
+              final isCurrentVisit = visit['id'] == widget.encounter['id'];
+
+              return Container(
+                margin: EdgeInsets.only(
+                  bottom: index < _caseVisits.length - 1 ? 12 : 0,
+                ),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isCurrentVisit
+                      ? Colors.blue.shade50
+                      : Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isCurrentVisit
+                        ? Colors.blue.shade200
+                        : Colors.grey.shade200,
+                    width: isCurrentVisit ? 2 : 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: isCurrentVisit
+                            ? Colors.blue.shade100
+                            : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isCurrentVisit
+                              ? Colors.blue.shade400
+                              : Colors.grey.shade300,
+                          width: 2,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${visit['visit_number']}',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: isCurrentVisit
+                                ? Colors.blue.shade700
+                                : Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            visit['chief_complaint'] ?? 'No complaint recorded',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: isCurrentVisit
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                              color: const Color(0xFF1E293B),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _formatDateTime(visit['created_at']),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (isCurrentVisit)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade700,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'Current',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            }).toList(),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToAddFollowup() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => NewEncounterPage(
+          selectedPatientId: widget.encounter['patient_id'],
+          selectedPatientName: widget.encounter['patient_name'],
+          parentCaseId: widget.encounter['case_id'],
+          parentEncounter: widget.encounter,
+        ),
       ),
     );
   }
@@ -361,21 +629,21 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
           _buildVitalItem(
             Icons.thermostat_outlined,
             'Temperature',
-            '${widget.encounter['temperature']}°F',
+            '${widget.encounter['temperature'] ?? 'N/A'}°F',
             const Color(0xFFDC2626),
           ),
           const SizedBox(height: 16),
           _buildVitalItem(
             Icons.favorite_outline,
             'Blood Pressure',
-            '${widget.encounter['bloodPressure']} mmHg',
+            '${widget.encounter['blood_pressure'] ?? 'N/A'} mmHg',
             const Color(0xFF2563EB),
           ),
           const SizedBox(height: 16),
           _buildVitalItem(
             Icons.monitor_heart_outlined,
             'Heart Rate',
-            '${widget.encounter['heartRate']} bpm',
+            '${widget.encounter['heart_rate'] ?? 'N/A'} bpm',
             const Color(0xFFDC2626),
           ),
         ],

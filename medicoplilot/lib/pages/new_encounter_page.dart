@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 import '../services/encounter_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/api_service.dart';
 
 class NewEncounterPage extends StatefulWidget {
   final String? selectedPatientId;
   final String? selectedPatientName;
   final PatientDetails? selectedPatientDetails;
+  final String? parentCaseId; // If provided, this is a follow-up encounter
+  final Map<String, dynamic>?
+  parentEncounter; // Parent encounter data for inheritance
 
   const NewEncounterPage({
     super.key,
     this.selectedPatientId,
     this.selectedPatientName,
     this.selectedPatientDetails,
+    this.parentCaseId,
+    this.parentEncounter,
   });
 
   @override
@@ -21,7 +25,6 @@ class NewEncounterPage extends StatefulWidget {
 
 class _NewEncounterPageState extends State<NewEncounterPage> {
   final _formKey = GlobalKey<FormState>();
-  final _apiService = ApiService();
 
   // Encounter fields controllers
   final _complaintController = TextEditingController();
@@ -49,6 +52,13 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
   AnalysisResponse? _analysisResults;
   bool _hasDiagnosisText = false;
 
+  // Timeline state
+  List<Map<String, dynamic>> _caseVisits = [];
+  bool _isLoadingVisits = false;
+  int _selectedPanelTab = 0; // 0 for AI Suggestions, 1 for Timeline
+
+  bool get _isFollowUp => widget.parentCaseId != null;
+
   @override
   void initState() {
     super.initState();
@@ -62,6 +72,59 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
     if (widget.selectedPatientDetails?.allergies != null) {
       _allergiesController.text = widget.selectedPatientDetails!.allergies!;
     }
+
+    // If this is a follow-up, inherit history_of_illness from parent
+    if (_isFollowUp && widget.parentEncounter != null) {
+      final parentHistory = widget.parentEncounter!['history_of_illness'];
+      if (parentHistory != null && parentHistory.toString().isNotEmpty) {
+        _historyController.text = parentHistory.toString();
+      }
+      // Load case visits for timeline display
+      _loadCaseVisits();
+    }
+  }
+
+  Future<void> _loadCaseVisits() async {
+    if (widget.parentCaseId == null) return;
+
+    setState(() {
+      _isLoadingVisits = true;
+    });
+
+    try {
+      final visits = await _encounterService.getVisitsInCase(widget.parentCaseId!);
+      if (mounted) {
+        setState(() {
+          _caseVisits = visits;
+          _isLoadingVisits = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading case visits: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingVisits = false;
+        });
+      }
+    }
+  }
+
+  String _formatDateTime(dynamic date) {
+    DateTime dateTime;
+
+    if (date is String) {
+      try {
+        dateTime = DateTime.parse(date);
+      } catch (e) {
+        return 'Invalid date';
+      }
+    } else if (date is DateTime) {
+      dateTime = date;
+    } else {
+      return 'Invalid date';
+    }
+
+    return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -112,14 +175,40 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Header
-                  const Text(
-                    'New Encounter',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1E293B),
-                    ),
+                  Row(
+                    children: [
+                      if (_isFollowUp)
+                        Container(
+                          margin: const EdgeInsets.only(right: 12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: const Text(
+                            'FOLLOW-UP',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue,
+                            ),
+                          ),
+                        ),
+                      Text(
+                        _isFollowUp ? 'Add Follow-up Visit' : 'New Encounter',
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                    ],
                   ),
+
                   const SizedBox(height: 8),
                   const Text(
                     'Start a new patient encounter',
@@ -536,116 +625,385 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
       ),
       child: Column(
         children: [
-          // Panel Header
+          // Tabbed Panel Header
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: const Color(0xFF2563EB).withAlpha(13),
+              color: Colors.white,
               border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2563EB),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.auto_awesome,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  _hasAnalyzed ? 'AI Analysis Results' : 'AI Suggestions',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
-                  ),
+                Row(
+                  children: [
+                    // Tab 1: AI Suggestions
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _selectedPanelTab = 0),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(
+                                color: _selectedPanelTab == 0
+                                    ? const Color(0xFF2563EB)
+                                    : Colors.transparent,
+                                width: 3,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.auto_awesome,
+                                size: 18,
+                                color: _selectedPanelTab == 0
+                                    ? const Color(0xFF2563EB)
+                                    : Colors.grey.shade500,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'AI Suggestions',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: _selectedPanelTab == 0
+                                      ? const Color(0xFF2563EB)
+                                      : Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Divider
+                    Container(
+                      width: 1,
+                      height: 24,
+                      color: Colors.grey.shade200,
+                    ),
+                    // Tab 2: Timeline (only show if follow-up)
+                    if (_isFollowUp)
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _selectedPanelTab = 1),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: _selectedPanelTab == 1
+                                      ? Colors.purple.shade700
+                                      : Colors.transparent,
+                                  width: 3,
+                                ),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.timeline,
+                                  size: 18,
+                                  color: _selectedPanelTab == 1
+                                      ? Colors.purple.shade700
+                                      : Colors.grey.shade500,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Visit Timeline',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: _selectedPanelTab == 1
+                                        ? Colors.purple.shade700
+                                        : Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ),
           ),
-          // Suggestions Content
+          // Tab Content
           Expanded(
-            child: _isAnalyzing
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(40),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const SizedBox(
-                            width: 80,
-                            height: 80,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 3,
-                              color: Color(0xFF059669),
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          Text(
-                            'AI is analyzing your diagnosis...',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'This may take 2-3 minutes\nusing local AI model (Microsoft Phi-2)',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey.shade500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                : _hasAnalyzed && _analysisResults != null
-                ? SingleChildScrollView(
-                    padding: const EdgeInsets.all(20),
-                    child: _buildAnalysisResultsContent(),
-                  )
-                : Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(40),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.analytics_outlined,
-                            size: 64,
-                            color: Colors.grey.shade300,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No Analysis Yet',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Enter your initial diagnosis and click "Analyze" to get AI-powered suggestions',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey.shade500,
-                            ),
-                          ),
-                        ],
-                      ),
+            child: _selectedPanelTab == 0
+                ? _buildAISuggestionsContent()
+                : _buildTimelineContent(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAISuggestionsContent() {
+    return _isAnalyzing
+        ? Center(
+            child: Padding(
+              padding: const EdgeInsets.all(40),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(
+                    width: 80,
+                    height: 80,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      color: Color(0xFF059669),
                     ),
                   ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'AI is analyzing your diagnosis...',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'This may take 2-3 minutes\nusing local AI model (Microsoft Phi-2)',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        : _hasAnalyzed && _analysisResults != null
+            ? SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: _buildAnalysisResultsContent(),
+              )
+            : Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(40),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.analytics_outlined,
+                        size: 64,
+                        color: Colors.grey.shade300,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No Analysis Yet',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Enter your initial diagnosis and click "Analyze" to get AI-powered suggestions',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+  }
+
+  Widget _buildTimelineContent() {
+    return _isLoadingVisits
+        ? Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(
+                    width: 60,
+                    height: 60,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      color: Color(0xFF7C3AED),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Loading timeline...',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        : _caseVisits.isEmpty
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.history_outlined,
+                        size: 48,
+                        color: Colors.grey.shade300,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No visits found',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    ..._caseVisits.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final visit = entry.value;
+                      final isLastVisit = index == _caseVisits.length - 1;
+
+                      return Column(
+                        children: [
+                          _buildTimelineVisitCard(visit, index),
+                          if (!isLastVisit)
+                            Container(
+                              height: 16,
+                              alignment: Alignment.center,
+                              child: Container(
+                                width: 2,
+                                height: 12,
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                        ],
+                      );
+                    }).toList(),
+                  ],
+                ),
+              );
+  }
+
+  Widget _buildTimelineVisitCard(Map<String, dynamic> visit, int index) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Timeline dot
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: Colors.purple.shade100,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.purple.shade300,
+                width: 2,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                '${visit['visit_number'] ?? index + 1}',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.purple.shade700,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Visit details
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        visit['chief_complaint'] ?? 'No complaint',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1E293B),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'Visit ${visit['visit_number'] ?? index + 1}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.purple.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _formatDateTime(visit['created_at']),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  if (visit['diagnosis'] != null &&
+                      visit['diagnosis'].toString().isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'Diagnosis: ${visit['diagnosis']}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -777,6 +1135,7 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
       final response = await _encounterService.saveEncounter(
         doctorId: currentUser.id,
         patientId: widget.selectedPatientId!,
+        caseId: widget.parentCaseId, // Pass parent case_id if follow-up
         chiefComplaint: _complaintController.text.trim(),
         historyOfIllness: _historyController.text.trim(),
         vitalSigns: vitalSigns,
