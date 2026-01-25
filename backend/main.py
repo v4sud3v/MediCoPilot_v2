@@ -5,6 +5,7 @@ from apis.analyze_encounter import router as analysis_router
 from apis.save_encounter import router as save_encounter_router
 from apis.search_patient import router as search_router
 from apis.encounters import router as encounters_router
+from apis.patient_education import router as patient_education_router
 
 app = FastAPI(
     title="MediCoPilot API",
@@ -27,6 +28,7 @@ app.include_router(analysis_router)
 app.include_router(save_encounter_router)
 app.include_router(search_router)
 app.include_router(encounters_router)
+app.include_router(patient_education_router)
 
 
 @app.get("/", tags=["Health"])
@@ -38,7 +40,8 @@ def root():
             "health": "/",
             "authentication": "/auth/*",
             "analysis": "/analysis/encounter",
-            "save_encounter": "/encounter/save"
+            "save_encounter": "/encounter/save",
+            "patient_education": "/patient-education/*"
         }
     }
 

@@ -66,3 +66,67 @@ class SaveEncounterResponse(BaseModel):
     case_id: str
     visit_number: int
     message: str
+    patient_education_id: Optional[str] = None
+    patient_summary_id: Optional[str] = None
+
+
+# Patient Education Models
+class PatientEducation(BaseModel):
+    id: str
+    encounter_id: str
+    patient_id: str
+    doctor_id: str
+    title: str
+    description: Optional[str] = None
+    content: str
+    status: str = "pending"
+    sent_at: Optional[str] = None
+    viewed_at: Optional[str] = None
+    created_at: str
+    # Additional fields from joins
+    patient_name: Optional[str] = None
+    patient_age: Optional[int] = None
+    patient_gender: Optional[str] = None
+    encounter_diagnosis: Optional[str] = None
+    encounter_chief_complaint: Optional[str] = None
+    visit_number: Optional[int] = None
+
+
+class PatientEducationListResponse(BaseModel):
+    education_list: List[PatientEducation]
+    total: int
+
+
+class UpdateEducationRequest(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    content: Optional[str] = None
+    status: Optional[str] = None
+
+
+class UpdateEducationResponse(BaseModel):
+    success: bool
+    message: str
+
+
+# Patient Summary Models
+class PatientSummary(BaseModel):
+    id: str
+    encounter_id: str
+    patient_id: str
+    doctor_id: str
+    summary_text: str
+    key_findings: Optional[str] = None
+    important_changes: Optional[str] = None
+    follow_up_notes: Optional[str] = None
+    created_at: str
+    updated_at: str
+    # Additional fields from joins
+    patient_name: Optional[str] = None
+    encounter_diagnosis: Optional[str] = None
+    visit_number: Optional[int] = None
+
+
+class PatientSummaryListResponse(BaseModel):
+    summaries: List[PatientSummary]
+    total: int

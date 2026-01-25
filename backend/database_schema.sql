@@ -64,18 +64,6 @@ CREATE TABLE public.documents (
   CONSTRAINT documents_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES public.encounters(id)
 );
 
--- History Table
-CREATE TABLE public.history (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  patient_id uuid,
-  encounter_id uuid,
-  summary_text text NOT NULL,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT history_pkey PRIMARY KEY (id),
-  CONSTRAINT history_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id),
-  CONSTRAINT history_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES public.encounters(id)
-);
-
 -- Medications Table
 CREATE TABLE public.medications (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -88,4 +76,41 @@ CREATE TABLE public.medications (
   prescribed_at timestamp with time zone DEFAULT now(),
   CONSTRAINT medications_pkey PRIMARY KEY (id),
   CONSTRAINT medications_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES public.encounters(id)
+);
+
+-- Patient Education Table (AI-generated educational content for patients)
+CREATE TABLE public.patient_education (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  encounter_id uuid NOT NULL,
+  patient_id uuid NOT NULL,
+  doctor_id uuid NOT NULL,
+  title text NOT NULL,
+  description text,
+  content text NOT NULL,
+  status text DEFAULT 'pending' CHECK (status = ANY (ARRAY['pending'::text, 'sent'::text, 'viewed'::text])),
+  sent_at timestamp with time zone,
+  viewed_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT patient_education_pkey PRIMARY KEY (id),
+  CONSTRAINT patient_education_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES public.encounters(id),
+  CONSTRAINT patient_education_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id),
+  CONSTRAINT patient_education_doctor_id_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id)
+);
+
+-- Patient Summary Table (AI-generated summary of important encounter details)
+CREATE TABLE public.patient_summary (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  encounter_id uuid NOT NULL,
+  patient_id uuid NOT NULL,
+  doctor_id uuid NOT NULL,
+  summary_text text NOT NULL,
+  key_findings text,
+  important_changes text,
+  follow_up_notes text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT patient_summary_pkey PRIMARY KEY (id),
+  CONSTRAINT patient_summary_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES public.encounters(id),
+  CONSTRAINT patient_summary_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id),
+  CONSTRAINT patient_summary_doctor_id_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id)
 );

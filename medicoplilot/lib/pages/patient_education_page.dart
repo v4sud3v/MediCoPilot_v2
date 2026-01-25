@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
+import '../services/auth_service.dart';
 
 class PatientEducationPage extends StatefulWidget {
   const PatientEducationPage({super.key});
@@ -10,220 +12,168 @@ class PatientEducationPage extends StatefulWidget {
 class _PatientEducationPageState extends State<PatientEducationPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final ApiService _apiService = ApiService();
+  final AuthService _authService = AuthService();
 
-  // Sample education data - replace with your actual data source
-  final List<Map<String, dynamic>> _pendingEducation = [
-    {
-      'id': '001',
-      'patient': 'John Doe - MRN: 12345',
-      'encounter': 'Encounter #001',
-      'title': 'Understanding Acute Bronchitis',
-      'description': 'AI-generated education material about your diagnosis',
-      'generatedAt': DateTime(2025, 12, 18, 10, 30),
-      'content': '''
-Acute Bronchitis - Patient Education
-
-What is Acute Bronchitis?
-Acute bronchitis is an inflammation of the airways in the lungs, typically caused by viral infections. It's characterized by persistent coughing and respiratory discomfort.
-
-Symptoms:
-- Persistent cough (may last 2-3 weeks)
-- Production of mucus (clear, white, or yellow)
-- Fatigue and weakness
-- Shortness of breath
-- Low-grade fever
-- Chest discomfort
-
-Recommended Care:
-1. Get plenty of rest
-2. Stay hydrated - drink plenty of water
-3. Use a humidifier to ease congestion
-4. Avoid smoking and smoke exposure
-5. Use over-the-counter pain relievers as directed
-6. Follow prescribed antibiotic regimen
-
-When to Seek Medical Attention:
-- If fever persists beyond 3 days
-- If you experience severe shortness of breath
-- If cough worsens or persists beyond 3 weeks
-- If you cough up blood
-
-Recovery Timeline:
-Most cases resolve within 2-3 weeks with proper care and rest.
-      ''',
-    },
-    {
-      'id': '002',
-      'patient': 'Jane Smith - MRN: 12346',
-      'encounter': 'Encounter #002',
-      'title': 'Managing Migraine Headaches',
-      'description': 'Comprehensive guide for migraine management',
-      'generatedAt': DateTime(2025, 12, 17, 14, 15),
-      'content': '''
-Migraine Management - Patient Education
-
-What is a Migraine?
-A migraine is a neurological condition characterized by intense, debilitating headaches often accompanied by other symptoms.
-
-Migraine Symptoms:
-- Severe throbbing pain on one or both sides of the head
-- Sensitivity to light and sound
-- Nausea or vomiting
-- Visual disturbances or aura
-- Numbness or tingling
-
-Triggers to Avoid:
-- Stress and anxiety
-- Certain foods (chocolate, cheese, MSG)
-- Changes in sleep patterns
-- Hormonal changes
-- Weather changes
-- Excessive caffeine
-
-Management Strategies:
-1. Maintain a consistent sleep schedule
-2. Stay well-hydrated
-3. Identify and avoid triggers
-4. Use prescribed medications as directed
-5. Practice relaxation techniques
-6. Apply cold/warm compresses
-
-When to Seek Emergency Care:
-- Sudden severe headache unlike previous migraines
-- Headache accompanied by fever, stiff neck
-- Headache with vision changes or weakness
-      ''',
-    },
-    {
-      'id': '003',
-      'patient': 'Robert Johnson - MRN: 12347',
-      'encounter': 'Encounter #003',
-      'title': 'Heart Health and Anxiety Management',
-      'description': 'Educational resource for anxiety-related chest pain',
-      'generatedAt': DateTime(2025, 12, 16, 9, 0),
-      'content': '''
-Anxiety and Heart Health - Patient Education
-
-Understanding Anxiety-Related Chest Pain
-While your chest pain was evaluated as anxiety-related, it's important to understand the connection between mental health and physical symptoms.
-
-How Anxiety Causes Chest Pain:
-- Muscle tension in the chest
-- Rapid heartbeat and hyperventilation
-- Increased adrenaline release
-- Heightened sensitivity to body sensations
-
-Recommended Coping Strategies:
-1. Deep breathing exercises (4-7-8 technique)
-2. Progressive muscle relaxation
-3. Mindfulness meditation
-4. Regular physical activity (with clearance)
-5. Adequate sleep and rest
-6. Limiting caffeine and alcohol
-7. Keeping a stress diary
-
-When to Seek Help:
-- If symptoms persist or worsen
-- If anxiety is affecting daily functioning
-- If you need professional mental health support
-
-Cardiology Follow-up:
-Please continue with your scheduled cardiology evaluation as recommended.
-      ''',
-    },
-  ];
-
-  final List<Map<String, dynamic>> _sentEducation = [
-    {
-      'id': '501',
-      'patient': 'Emily Davis - MRN: 12348',
-      'encounter': 'Encounter #004',
-      'title': 'Managing Seasonal Allergies',
-      'description': 'AI-generated allergy management guide',
-      'generatedAt': DateTime(2025, 12, 15, 16, 45),
-      'sentAt': DateTime(2025, 12, 15, 17, 30),
-      'status': 'Sent',
-      'content': '''
-Seasonal Allergies - Patient Education
-
-Understanding Seasonal Allergies
-Seasonal allergies occur when your immune system overreacts to pollen and other environmental triggers.
-
-Common Symptoms:
-- Sneezing and nasal congestion
-- Itchy eyes and throat
-- Runny nose
-- Post-nasal drip
-
-Effective Management:
-1. Take prescribed antihistamines
-2. Avoid outdoor activities during high pollen times
-3. Keep windows closed during allergy season
-4. Use air filters in home and car
-5. Wash hands and change clothes after outdoor time
-6. Use saline nasal rinse
-
-Additional Tips:
-- Monitor pollen counts
-- Consider wearing sunglasses outdoors
-- Shower before bed to remove pollen
-
-When to Contact Your Doctor:
-- If symptoms worsen despite medication
-- If new symptoms develop
-      ''',
-    },
-    {
-      'id': '502',
-      'patient': 'Michael Brown - MRN: 12349',
-      'encounter': 'Encounter #005',
-      'title': 'Back Pain Prevention and Treatment',
-      'description': 'Physical therapy and lifestyle modifications',
-      'generatedAt': DateTime(2025, 12, 14, 11, 20),
-      'sentAt': DateTime(2025, 12, 14, 12, 45),
-      'status': 'Sent',
-      'content': '''
-Back Pain Management - Patient Education
-
-Understanding Muscle Strain
-Muscle strain in the back is a common condition that responds well to proper treatment and prevention strategies.
-
-Pain Management:
-1. Apply ice for first 48 hours
-2. Switch to heat therapy after 48 hours
-3. Take prescribed pain relievers
-4. Avoid heavy lifting and strenuous activity
-
-Physical Therapy Exercises:
-- Gentle stretching
-- Core strengthening exercises
-- Low-impact aerobic activity
-- Proper posture practice
-
-Prevention Tips:
-1. Maintain proper posture
-2. Use correct lifting techniques
-3. Take regular breaks if sitting for long periods
-4. Stay physically active
-5. Maintain healthy weight
-6. Use ergonomic furniture
-
-Expected Recovery:
-Most muscle strains improve within 2-6 weeks with proper treatment and rest.
-      ''',
-    },
-  ];
+  List<Map<String, dynamic>> _pendingEducation = [];
+  List<Map<String, dynamic>> _sentEducation = [];
+  bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _loadEducationData();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadEducationData() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final doctorId = _authService.currentUser?.id;
+      if (doctorId == null) {
+        setState(() {
+          _errorMessage = 'Please log in to view education materials';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Fetch pending education materials
+      final pendingResponse = await _apiService.getPatientEducationForDoctor(
+        doctorId,
+        status: 'pending',
+      );
+
+      // Fetch sent education materials
+      final sentResponse = await _apiService.getPatientEducationForDoctor(
+        doctorId,
+        status: 'sent',
+      );
+
+      setState(() {
+        _pendingEducation = _parseEducationList(pendingResponse);
+        _sentEducation = _parseEducationList(sentResponse);
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Failed to load education materials: ${e.toString()}';
+        _isLoading = false;
+      });
+    }
+  }
+
+  List<Map<String, dynamic>> _parseEducationList(dynamic response) {
+    if (response == null || response['education_list'] == null) {
+      return [];
+    }
+
+    final List educationList = response['education_list'] as List;
+    return educationList.map((edu) {
+      return {
+        'id': edu['id'],
+        'encounter_id': edu['encounter_id'],
+        'patient_id': edu['patient_id'],
+        'patient':
+            '${edu['patient_name'] ?? 'Unknown'} - ${edu['patient_age'] ?? 'N/A'} years, ${edu['patient_gender'] ?? 'N/A'}',
+        'encounter':
+            'Visit #${edu['visit_number'] ?? 1} - ${edu['encounter_chief_complaint'] ?? 'N/A'}',
+        'title': edu['title'] ?? 'Education Material',
+        'description': edu['description'] ?? 'AI-generated education material',
+        'content': edu['content'] ?? '',
+        'status': edu['status'] ?? 'pending',
+        'generatedAt': _parseDateTime(edu['created_at']),
+        'sentAt': edu['sent_at'] != null
+            ? _parseDateTime(edu['sent_at'])
+            : null,
+      };
+    }).toList();
+  }
+
+  DateTime _parseDateTime(String? dateStr) {
+    if (dateStr == null) return DateTime.now();
+    try {
+      return DateTime.parse(dateStr);
+    } catch (e) {
+      return DateTime.now();
+    }
+  }
+
+  Future<void> _sendEducation(Map<String, dynamic> education) async {
+    try {
+      await _apiService.sendPatientEducation(education['id']);
+
+      // Refresh the list
+      await _loadEducationData();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Education material sent to patient successfully!'),
+            backgroundColor: Color(0xFF16A34A),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send education: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _updateEducation(
+    String educationId, {
+    String? title,
+    String? description,
+    String? content,
+  }) async {
+    try {
+      await _apiService.updatePatientEducation(
+        educationId,
+        title: title,
+        description: description,
+        content: content,
+      );
+
+      // Refresh the list
+      await _loadEducationData();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Changes saved successfully!'),
+            backgroundColor: Color(0xFF7C3AED),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save changes: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -287,6 +237,11 @@ Most muscle strains improve within 2-6 weeks with proper treatment and rest.
                         ],
                       ),
                     ),
+                    IconButton(
+                      onPressed: _loadEducationData,
+                      icon: const Icon(Icons.refresh),
+                      tooltip: 'Refresh',
+                    ),
                   ],
                 ),
               ],
@@ -332,15 +287,42 @@ Most muscle strains improve within 2-6 weeks with proper treatment and rest.
           ),
           // Tab Content
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                // Pending Tab
-                _buildEducationList(_pendingEducation, isPending: true),
-                // Sent Tab
-                _buildEducationList(_sentEducation, isPending: false),
-              ],
-            ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _errorMessage != null
+                ? _buildErrorState()
+                : TabBarView(
+                    controller: _tabController,
+                    children: [
+                      // Pending Tab
+                      _buildEducationList(_pendingEducation, isPending: true),
+                      // Sent Tab
+                      _buildEducationList(_sentEducation, isPending: false),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
+          const SizedBox(height: 16),
+          Text(
+            _errorMessage ?? 'An error occurred',
+            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: _loadEducationData,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
           ),
         ],
       ),
@@ -372,18 +354,28 @@ Most muscle strains improve within 2-6 weeks with proper treatment and rest.
                 fontWeight: FontWeight.w500,
               ),
             ),
+            const SizedBox(height: 8),
+            Text(
+              isPending
+                  ? 'Education materials will appear here after saving encounters'
+                  : 'Sent materials will appear here',
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+            ),
           ],
         ),
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(24),
-      itemCount: educationList.length,
-      itemBuilder: (context, index) {
-        final education = educationList[index];
-        return _buildEducationCard(education, isPending);
-      },
+    return RefreshIndicator(
+      onRefresh: _loadEducationData,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(24),
+        itemCount: educationList.length,
+        itemBuilder: (context, index) {
+          final education = educationList[index];
+          return _buildEducationCard(education, isPending);
+        },
+      ),
     );
   }
 
@@ -624,9 +616,7 @@ Most muscle strains improve within 2-6 weeks with proper treatment and rest.
   }
 
   void _showFullContent(BuildContext context, Map<String, dynamic> education) {
-    final bool isPending = _pendingEducation.any(
-      (e) => e['id'] == education['id'],
-    );
+    final bool isPending = education['status'] == 'pending';
 
     showDialog(
       context: context,
@@ -857,24 +847,18 @@ Most muscle strains improve within 2-6 weeks with proper treatment and rest.
             child: const Text('Cancel'),
           ),
           OutlinedButton.icon(
-            onPressed: () {
+            onPressed: () async {
               // Save changes
-              setState(() {
-                education['title'] = titleController.text;
-                education['description'] = descriptionController.text;
-                education['content'] = contentController.text;
-              });
+              await _updateEducation(
+                education['id'],
+                title: titleController.text,
+                description: descriptionController.text,
+                content: contentController.text,
+              );
               titleController.dispose();
               descriptionController.dispose();
               contentController.dispose();
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Changes saved successfully!'),
-                  backgroundColor: Color(0xFF7C3AED),
-                  duration: Duration(seconds: 2),
-                ),
-              );
+              if (mounted) Navigator.pop(context);
             },
             icon: const Icon(Icons.save, size: 18),
             label: const Text('Save Changes'),
@@ -884,18 +868,21 @@ Most muscle strains improve within 2-6 weeks with proper treatment and rest.
             ),
           ),
           ElevatedButton.icon(
-            onPressed: () {
+            onPressed: () async {
               // Save and send
-              setState(() {
-                education['title'] = titleController.text;
-                education['description'] = descriptionController.text;
-                education['content'] = contentController.text;
-              });
+              await _updateEducation(
+                education['id'],
+                title: titleController.text,
+                description: descriptionController.text,
+                content: contentController.text,
+              );
               titleController.dispose();
               descriptionController.dispose();
               contentController.dispose();
-              Navigator.pop(context);
-              _showSendDialog(context, education);
+              if (mounted) {
+                Navigator.pop(context);
+                _showSendDialog(context, education);
+              }
             },
             icon: const Icon(Icons.send, size: 18),
             label: const Text('Save & Send'),
@@ -969,17 +956,9 @@ Most muscle strains improve within 2-6 weeks with proper treatment and rest.
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text(
-                    'Education material sent to patient successfully!',
-                  ),
-                  backgroundColor: const Color(0xFF16A34A),
-                  duration: const Duration(seconds: 3),
-                ),
-              );
+              await _sendEducation(education);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF16A34A),
@@ -1041,7 +1020,7 @@ Most muscle strains improve within 2-6 weeks with proper treatment and rest.
             ),
             const SizedBox(height: 8),
             Text(
-              'Previously sent: ${_formatDateTime(education['sentAt'])}',
+              'Previously sent: ${_formatDateTime(education['sentAt'] ?? DateTime.now())}',
               style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
             ),
           ],
@@ -1052,17 +1031,9 @@ Most muscle strains improve within 2-6 weeks with proper treatment and rest.
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text(
-                    'Education material resent to patient successfully!',
-                  ),
-                  backgroundColor: const Color(0xFF059669),
-                  duration: const Duration(seconds: 3),
-                ),
-              );
+              await _sendEducation(education);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF059669),
