@@ -73,12 +73,21 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
       _allergiesController.text = widget.selectedPatientDetails!.allergies!;
     }
 
-    // If this is a follow-up, inherit history_of_illness from parent
+    // If this is a follow-up, inherit data from parent
     if (_isFollowUp && widget.parentEncounter != null) {
       final parentHistory = widget.parentEncounter!['history_of_illness'];
       if (parentHistory != null && parentHistory.toString().isNotEmpty) {
         _historyController.text = parentHistory.toString();
       }
+
+      // Also fetch allergies from parent encounter if not already set
+      final parentAllergies = widget.parentEncounter!['allergies'];
+      if (parentAllergies != null && parentAllergies.toString().isNotEmpty) {
+        if (_allergiesController.text.isEmpty) {
+          _allergiesController.text = parentAllergies.toString();
+        }
+      }
+
       // Load case visits for timeline display
       _loadCaseVisits();
     }
@@ -92,7 +101,9 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
     });
 
     try {
-      final visits = await _encounterService.getVisitsInCase(widget.parentCaseId!);
+      final visits = await _encounterService.getVisitsInCase(
+        widget.parentCaseId!,
+      );
       if (mounted) {
         setState(() {
           _caseVisits = visits;
@@ -177,6 +188,12 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
                   // Header
                   Row(
                     children: [
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back),
+                        onPressed: () => Navigator.pop(context),
+                        tooltip: 'Go back',
+                      ),
+                      const SizedBox(width: 8),
                       if (_isFollowUp)
                         Container(
                           margin: const EdgeInsets.only(right: 12),
@@ -512,10 +529,10 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
                             ),
                             const SizedBox(height: 24),
 
-                            // Initial Diagnosis
+                            // Initial Diagnosis and Treatment Plan
                             _buildTextField(
                               controller: _diagnosisController,
-                              label: 'Initial Diagnosis',
+                              label: 'Initial Diagnosis and Treatment Plan',
                               hint:
                                   'Enter your initial diagnosis based on the examination and findings',
                               icon: Icons.medical_information_outlined,
@@ -773,53 +790,47 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
                   Text(
                     'This may take 2-3 minutes\nusing local AI model (Microsoft Phi-2)',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade500,
-                    ),
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
                   ),
                 ],
               ),
             ),
           )
         : _hasAnalyzed && _analysisResults != null
-            ? SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: _buildAnalysisResultsContent(),
-              )
-            : Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(40),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.analytics_outlined,
-                        size: 64,
-                        color: Colors.grey.shade300,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No Analysis Yet',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Enter your initial diagnosis and click "Analyze" to get AI-powered suggestions',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey.shade500,
-                        ),
-                      ),
-                    ],
+        ? SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: _buildAnalysisResultsContent(),
+          )
+        : Center(
+            child: Padding(
+              padding: const EdgeInsets.all(40),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.analytics_outlined,
+                    size: 64,
+                    color: Colors.grey.shade300,
                   ),
-                ),
-              );
+                  const SizedBox(height: 16),
+                  Text(
+                    'No Analysis Yet',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Enter your initial diagnosis and click "Analyze" to get AI-powered suggestions',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+                  ),
+                ],
+              ),
+            ),
+          );
   }
 
   Widget _buildTimelineContent() {
@@ -841,8 +852,30 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
                   const SizedBox(height: 16),
                   Text(
                     'Loading timeline...',
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+          )
+        : _caseVisits.isEmpty
+        ? Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.history_outlined,
+                    size: 48,
+                    color: Colors.grey.shade300,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No visits found',
                     style: TextStyle(
                       fontSize: 14,
+                      fontWeight: FontWeight.w600,
                       color: Colors.grey.shade600,
                     ),
                   ),
@@ -850,59 +883,34 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
               ),
             ),
           )
-        : _caseVisits.isEmpty
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.history_outlined,
-                        size: 48,
-                        color: Colors.grey.shade300,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'No visits found',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    ..._caseVisits.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final visit = entry.value;
-                      final isLastVisit = index == _caseVisits.length - 1;
+        : SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                ..._caseVisits.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final visit = entry.value;
+                  final isLastVisit = index == _caseVisits.length - 1;
 
-                      return Column(
-                        children: [
-                          _buildTimelineVisitCard(visit, index),
-                          if (!isLastVisit)
-                            Container(
-                              height: 16,
-                              alignment: Alignment.center,
-                              child: Container(
-                                width: 2,
-                                height: 12,
-                                color: Colors.grey.shade300,
-                              ),
-                            ),
-                        ],
-                      );
-                    }).toList(),
-                  ],
-                ),
-              );
+                  return Column(
+                    children: [
+                      _buildTimelineVisitCard(visit, index),
+                      if (!isLastVisit)
+                        Container(
+                          height: 16,
+                          alignment: Alignment.center,
+                          child: Container(
+                            width: 2,
+                            height: 12,
+                            color: Colors.grey.shade300,
+                          ),
+                        ),
+                    ],
+                  );
+                }).toList(),
+              ],
+            ),
+          );
   }
 
   Widget _buildTimelineVisitCard(Map<String, dynamic> visit, int index) {
@@ -918,10 +926,7 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
             decoration: BoxDecoration(
               color: Colors.purple.shade100,
               shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.purple.shade300,
-                width: 2,
-              ),
+              border: Border.all(color: Colors.purple.shade300, width: 2),
             ),
             child: Center(
               child: Text(
@@ -983,10 +988,7 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
                   const SizedBox(height: 6),
                   Text(
                     _formatDateTime(visit['created_at']),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                   if (visit['diagnosis'] != null &&
                       visit['diagnosis'].toString().isNotEmpty) ...[
@@ -1138,6 +1140,7 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
         caseId: widget.parentCaseId, // Pass parent case_id if follow-up
         chiefComplaint: _complaintController.text.trim(),
         historyOfIllness: _historyController.text.trim(),
+        allergies: _allergiesController.text.trim(),
         vitalSigns: vitalSigns,
         physicalExam: _examinationController.text.trim(),
         diagnosis: _diagnosisController.text.trim(),

@@ -35,6 +35,7 @@ CREATE TABLE public.encounters (
   visit_number integer NOT NULL,
   chief_complaint text,
   history_of_illness text,
+  allergies text,
   temperature double precision,
   blood_pressure text,
   heart_rate integer,

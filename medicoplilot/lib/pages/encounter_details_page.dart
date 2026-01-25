@@ -98,6 +98,249 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
     }
   }
 
+  bool _isFollowUpVisit() {
+    final visitNumber = widget.encounter['visit_number'] ?? 1;
+    return visitNumber > 1;
+  }
+
+  Widget _buildReasonForVisitCard() {
+    return _buildInfoCard(
+      'Reason for Visit',
+      Icons.assignment_turned_in_outlined,
+      const Color(0xFF2563EB),
+      [
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            widget.encounter['chief_complaint'] ?? 'Regular follow-up visit',
+            style: const TextStyle(
+              fontSize: 15,
+              height: 1.6,
+              color: Color(0xFF1E293B),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPresentConditionCard() {
+    return _buildInfoCard(
+      'Present Condition',
+      Icons.health_and_safety_outlined,
+      const Color(0xFF059669),
+      [
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            widget.encounter['physical_exam'] ?? 'No condition notes recorded',
+            style: const TextStyle(
+              fontSize: 15,
+              height: 1.6,
+              color: Color(0xFF1E293B),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildConditionChangeCard() {
+    return _buildInfoCard(
+      'Change in Condition',
+      Icons.trending_up_outlined,
+      const Color(0xFFD97706),
+      [
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade100,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(
+                        Icons.trending_up,
+                        color: Colors.green.shade700,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Status',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          Text(
+                            _getConditionStatus(),
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Observations:',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                widget.encounter['history_of_illness'] ??
+                    'No observations recorded',
+                style: const TextStyle(
+                  fontSize: 14,
+                  height: 1.6,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _getConditionStatus() {
+    // Try to infer condition status from diagnosis or history
+    final diagnosis = (widget.encounter['diagnosis'] ?? '')
+        .toString()
+        .toLowerCase();
+    final history = (widget.encounter['history_of_illness'] ?? '')
+        .toString()
+        .toLowerCase();
+    final combined = '$diagnosis $history';
+
+    if (combined.contains('improv') ||
+        combined.contains('better') ||
+        combined.contains('resolved')) {
+      return '✓ Improving';
+    } else if (combined.contains('worse') ||
+        combined.contains('deteriorat') ||
+        combined.contains('declin')) {
+      return '⚠ Worsening';
+    } else if (combined.contains('stable') || combined.contains('unchanged')) {
+      return '→ Stable';
+    }
+    return '→ No significant change';
+  }
+
+  Widget _buildMedicationChangesCard() {
+    return _buildInfoCard(
+      'Medication Changes',
+      Icons.medication_outlined,
+      const Color(0xFF7C3AED),
+      [
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade100,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(
+                        Icons.medication,
+                        color: Colors.blue.shade700,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Current Medications',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          Text(
+                            widget.encounter['medication'] ??
+                                'No medication information',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blue.shade700,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Notes:',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Medication adjustments and changes based on current condition',
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.6,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -248,26 +491,97 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
                           ],
                         ),
                         const SizedBox(height: 20),
-                        _buildInfoCard(
-                          'Chief Complaint',
-                          Icons.healing_outlined,
-                          const Color(0xFFDC2626),
-                          [
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8),
-                              child: Text(
-                                widget.encounter['chief_complaint'] ??
-                                    'No complaint',
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  height: 1.6,
-                                  color: Color(0xFF1E293B),
-                                ),
+                        if (_isFollowUpVisit()) ...[
+                          // Follow-up Visit Badge
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.blue.shade50,
+                                  Colors.cyan.shade50,
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.blue.shade300,
+                                width: 2,
                               ),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade100,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                    Icons.repeat_outlined,
+                                    color: Colors.blue.shade700,
+                                    size: 24,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Follow-up Visit',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.blue.shade900,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Monitoring patient progress and response to treatment',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.blue.shade700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          _buildReasonForVisitCard(),
+                          const SizedBox(height: 20),
+                          _buildPresentConditionCard(),
+                          const SizedBox(height: 20),
+                          _buildConditionChangeCard(),
+                          const SizedBox(height: 20),
+                          _buildMedicationChangesCard(),
+                          const SizedBox(height: 20),
+                        ] else ...[
+                          _buildInfoCard(
+                            'Chief Complaint',
+                            Icons.healing_outlined,
+                            const Color(0xFFDC2626),
+                            [
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  widget.encounter['chief_complaint'] ??
+                                      'No complaint',
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    height: 1.6,
+                                    color: Color(0xFF1E293B),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                        ],
                         _buildInfoCard(
                           'Diagnosis & Treatment',
                           Icons.medical_information_outlined,

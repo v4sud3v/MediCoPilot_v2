@@ -322,6 +322,7 @@ class EncounterService {
     caseId, // If provided, creates follow-up; if null, creates new encounter
     String? chiefComplaint,
     String? historyOfIllness,
+    String? allergies,
     required VitalSigns vitalSigns,
     String? physicalExam,
     String? diagnosis,
@@ -338,6 +339,7 @@ class EncounterService {
           'chief_complaint': chiefComplaint,
         if (historyOfIllness != null && historyOfIllness.isNotEmpty)
           'history_of_illness': historyOfIllness,
+        if (allergies != null && allergies.isNotEmpty) 'allergies': allergies,
         'vital_signs': vitalSigns.toJson(),
         if (physicalExam != null && physicalExam.isNotEmpty)
           'physical_exam': physicalExam,
