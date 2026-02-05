@@ -1,6 +1,9 @@
 // Full-page Encounter Detail View
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../services/encounter_service.dart';
+import '../services/api_service.dart';
 import 'new_encounter_page.dart';
 
 class EncounterDetailPage extends StatefulWidget {
@@ -1110,26 +1113,12 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
 
     switch (file['type']) {
       case 'X-Ray':
-      case 'CT Scan':
-      case 'MRI Scan':
         fileIcon = Icons.medical_services;
         fileColor = const Color(0xFFDC2626);
         break;
-      case 'Lab Report':
+      case 'Lab Notes':
         fileIcon = Icons.science;
         fileColor = const Color(0xFF059669);
-        break;
-      case 'ECG':
-        fileIcon = Icons.monitor_heart;
-        fileColor = const Color(0xFFD97706);
-        break;
-      case 'Ultrasound':
-        fileIcon = Icons.waves;
-        fileColor = const Color(0xFF7C3AED);
-        break;
-      case 'Prescription':
-        fileIcon = Icons.medication;
-        fileColor = const Color(0xFF2563EB);
         break;
       default:
         fileIcon = Icons.insert_drive_file;
@@ -1233,117 +1222,554 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
   void _showAnalyzeDialog(BuildContext context, Map<String, String> file) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
+      builder: (context) => _XrayAnalyzeDialog(
+        file: file,
+        patientContext: widget.encounter['diagnosis'] ?? '',
+      ),
+    );
+  }
+}
+
+/// Stateful dialog for X-ray analysis with body region selection and results display
+class _XrayAnalyzeDialog extends StatefulWidget {
+  final Map<String, String> file;
+  final String patientContext;
+
+  const _XrayAnalyzeDialog({
+    required this.file,
+    required this.patientContext,
+  });
+
+  @override
+  State<_XrayAnalyzeDialog> createState() => _XrayAnalyzeDialogState();
+}
+
+class _XrayAnalyzeDialogState extends State<_XrayAnalyzeDialog> {
+  final ApiService _apiService = ApiService();
+  String _selectedBodyRegion = 'chest';
+  bool _isAnalyzing = false;
+  Map<String, dynamic>? _analysisResult;
+  String? _error;
+
+  final List<Map<String, String>> _bodyRegions = [
+    {'value': 'chest', 'label': 'Chest'},
+    {'value': 'head', 'label': 'Head / Brain'},
+    {'value': 'spine', 'label': 'Spine'},
+    {'value': 'limb', 'label': 'Limbs / Extremities'},
+    {'value': 'abdomen', 'label': 'Abdomen'},
+    {'value': 'pelvis', 'label': 'Pelvis'},
+    {'value': 'other', 'label': 'Other'},
+  ];
+
+  Future<void> _startAnalysis() async {
+    setState(() {
+      _isAnalyzing = true;
+      _error = null;
+      _analysisResult = null;
+    });
+
+    try {
+      // Read the file and convert to base64
+      final filePath = widget.file['path'];
+      if (filePath == null) {
+        throw Exception('File path not found');
+      }
+
+      final file = File(filePath);
+      if (!await file.exists()) {
+        throw Exception('File not found at $filePath');
+      }
+
+      final bytes = await file.readAsBytes();
+      final base64Image = base64Encode(bytes);
+
+      // Call the API
+      final result = await _apiService.analyzeXray(
+        imageBase64: base64Image,
+        imageType: widget.file['type'] ?? 'X-Ray',
+        bodyRegion: _selectedBodyRegion,
+        patientContext: widget.patientContext,
+      );
+
+      if (mounted) {
+        setState(() {
+          _analysisResult = result;
+          _isAnalyzing = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isAnalyzing = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF059669).withAlpha(25),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.analytics_outlined,
+              color: Color(0xFF059669),
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Text('AI Medical Analysis'),
+        ],
+      ),
+      content: SizedBox(
+        width: 600,
+        height: 500,
+        child: _analysisResult != null
+            ? _buildResultsView()
+            : _buildConfigView(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(_analysisResult != null ? 'Close' : 'Cancel'),
+        ),
+        if (_analysisResult == null)
+          ElevatedButton.icon(
+            onPressed: _isAnalyzing ? null : _startAnalysis,
+            icon: _isAnalyzing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.play_arrow, size: 18),
+            label: Text(_isAnalyzing ? 'Analyzing...' : 'Start Analysis'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF059669),
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: const Color(0xFF059669).withAlpha(150),
+              disabledForegroundColor: Colors.white70,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildConfigView() {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Info banner
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'AI analysis from 3 specialist perspectives: Cardiologist, Neurologist, and Orthopedist.',
+                    style: TextStyle(fontSize: 13, color: Colors.blue.shade700),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // File info
+          Text(
+            'Document: ${widget.file['name']}',
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Type: ${widget.file['type']}',
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 20),
+
+          // Body region selector
+          const Text(
+            'Select Body Region:',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _bodyRegions.map((region) {
+              final isSelected = _selectedBodyRegion == region['value'];
+              return ChoiceChip(
+                label: Text(region['label']!),
+                selected: isSelected,
+                onSelected: (selected) {
+                  if (selected) {
+                    setState(() => _selectedBodyRegion = region['value']!);
+                  }
+                },
+                selectedColor: const Color(0xFF2563EB).withAlpha(50),
+                labelStyle: TextStyle(
+                  color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade700,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                ),
+              );
+            }).toList(),
+          ),
+
+          if (_error != null) ...[
+            const SizedBox(height: 20),
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF059669).withAlpha(25),
+                color: Colors.red.shade50,
                 borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade200),
               ),
-              child: const Icon(
-                Icons.analytics_outlined,
-                color: Color(0xFF059669),
-                size: 24,
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _error!,
+                      style: TextStyle(fontSize: 13, color: Colors.red.shade700),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 12),
-            const Text('AI Analysis'),
           ],
-        ),
-        content: SizedBox(
-          width: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      color: Colors.blue.shade700,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'AI-powered analysis will detect anomalies and issues in your ${file['type']}.',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.blue.shade700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResultsView() {
+    final analyses = _analysisResult!['analyses'] as List<dynamic>? ?? [];
+    final primarySpecialist = _analysisResult!['primary_specialist'] as String?;
+    final overallSummary = _analysisResult!['overall_summary'] as String? ?? '';
+
+    return DefaultTabController(
+      length: 3,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Summary banner
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.blue.shade50, Colors.cyan.shade50],
               ),
-              const SizedBox(height: 16),
-              Text(
-                'Document: ${file['name']}',
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.summarize, color: Colors.blue.shade700, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    overallSummary,
+                    style: TextStyle(fontSize: 13, color: Colors.blue.shade800),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          if (primarySpecialist != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF059669).withAlpha(25),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                'Primary: $primarySpecialist',
                 style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF059669),
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Type: ${file['type']}',
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+            ),
+          ],
+
+          const SizedBox(height: 16),
+
+          // Specialist tabs
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: TabBar(
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.grey.shade700,
+              indicator: BoxDecoration(
+                color: const Color(0xFF2563EB),
+                borderRadius: BorderRadius.circular(8),
               ),
-              const SizedBox(height: 20),
+              indicatorSize: TabBarIndicatorSize.tab,
+              tabs: [
+                _buildTab('Cardio', Icons.favorite, analyses, 'Cardiologist'),
+                _buildTab('Neuro', Icons.psychology, analyses, 'Neurologist'),
+                _buildTab('Ortho', Icons.accessibility_new, analyses, 'Orthopedist'),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Tab content
+          Expanded(
+            child: TabBarView(
+              children: [
+                _buildSpecialistContent(analyses, 'Cardiologist'),
+                _buildSpecialistContent(analyses, 'Neurologist'),
+                _buildSpecialistContent(analyses, 'Orthopedist'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTab(String label, IconData icon, List<dynamic> analyses, String specialist) {
+    final analysis = analyses.firstWhere(
+      (a) => a['specialist'] == specialist,
+      orElse: () => null,
+    );
+    final hasFindings = analysis?['has_findings'] ?? false;
+
+    return Tab(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 16),
+          const SizedBox(width: 4),
+          Text(label, style: const TextStyle(fontSize: 12)),
+          if (hasFindings) ...[
+            const SizedBox(width: 4),
+            Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpecialistContent(List<dynamic> analyses, String specialist) {
+    final analysis = analyses.firstWhere(
+      (a) => a['specialist'] == specialist,
+      orElse: () => null,
+    );
+
+    if (analysis == null) {
+      return const Center(child: Text('No analysis available'));
+    }
+
+    final hasFindings = analysis['has_findings'] ?? false;
+    final findings = analysis['findings'] as List<dynamic>? ?? [];
+    final warnings = analysis['overlooked_warnings'] as List<dynamic>? ?? [];
+    final actions = analysis['recommended_actions'] as List<dynamic>? ?? [];
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!hasFindings)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green.shade700, size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'No significant $specialist findings detected.',
+                      style: TextStyle(fontSize: 14, color: Colors.green.shade700),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else ...[
+            // Findings
+            const Text(
+              'Findings:',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            ...findings.map((f) => _buildFindingCard(f)),
+          ],
+
+          if (warnings.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const Text(
+              '⚠️ Things to Watch For:',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            ...warnings.map((w) => Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.warning_amber, size: 16, color: Colors.orange.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      w.toString(),
+                      style: TextStyle(fontSize: 13, color: Colors.orange.shade800),
+                    ),
+                  ),
+                ],
+              ),
+            )),
+          ],
+
+          if (actions.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const Text(
+              '✅ Recommended Actions:',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            ...actions.map((a) => Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.arrow_right, size: 16, color: Colors.blue.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      a.toString(),
+                      style: TextStyle(fontSize: 13, color: Colors.blue.shade800),
+                    ),
+                  ),
+                ],
+              ),
+            )),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFindingCard(dynamic finding) {
+    final title = finding['title'] ?? 'Unknown';
+    final description = finding['description'] ?? '';
+    final severity = finding['severity'] ?? 'Medium';
+    final isRedFlag = finding['is_red_flag'] ?? false;
+
+    Color severityColor;
+    switch (severity) {
+      case 'High':
+        severityColor = Colors.red;
+        break;
+      case 'Medium':
+        severityColor = Colors.orange;
+        break;
+      default:
+        severityColor = Colors.green;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isRedFlag ? Colors.red.shade50 : Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isRedFlag ? Colors.red.shade300 : Colors.grey.shade200,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (isRedFlag) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    '🚨 RED FLAG',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.shade200),
+                  color: severityColor.withAlpha(25),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.construction,
-                      color: Colors.orange.shade700,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'This feature is coming soon! AI analysis will automatically detect various issues and anomalies in scans and reports.',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.orange.shade700,
-                        ),
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  severity,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: severityColor,
+                  ),
                 ),
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          ElevatedButton.icon(
-            onPressed: null, // Disabled for now
-            icon: const Icon(Icons.play_arrow, size: 18),
-            label: const Text('Start Analysis'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF059669),
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: Colors.grey.shade300,
-              disabledForegroundColor: Colors.grey.shade500,
-            ),
+          const SizedBox(height: 6),
+          Text(
+            description,
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
           ),
         ],
       ),

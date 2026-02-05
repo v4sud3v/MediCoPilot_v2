@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:medicoplilot/pages/encounter_details_page.dart';
 import 'package:medicoplilot/services/encounter_service.dart';
+import 'package:medicoplilot/services/api_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
@@ -131,7 +132,7 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
   }
 
   Future<Map<String, String>?> _uploadFile(String encounterId) async {
-    String selectedType = 'Lab Report';
+    String selectedType = 'X-Ray';
     String? selectedFilePath;
     String? selectedFileName;
 
@@ -211,31 +212,10 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
                       ),
                     ),
                     items: const [
-                      DropdownMenuItem(
-                        value: 'Lab Report',
-                        child: Text('Lab Report'),
-                      ),
                       DropdownMenuItem(value: 'X-Ray', child: Text('X-Ray')),
                       DropdownMenuItem(
-                        value: 'CT Scan',
-                        child: Text('CT Scan'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'MRI Scan',
-                        child: Text('MRI Scan'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'Ultrasound',
-                        child: Text('Ultrasound'),
-                      ),
-                      DropdownMenuItem(value: 'ECG', child: Text('ECG')),
-                      DropdownMenuItem(
-                        value: 'Prescription',
-                        child: Text('Prescription'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'Other Document',
-                        child: Text('Other Document'),
+                        value: 'Lab Notes',
+                        child: Text('Lab Notes'),
                       ),
                     ],
                     onChanged: (value) {
@@ -272,15 +252,45 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
                     // Copy file to app directory
                     await File(selectedFilePath!).copy(newFilePath);
 
-                    final newFile = {
-                      'name': selectedFileName!,
-                      'type': selectedType,
-                      'path': newFilePath,
-                      'uploadDate': DateTime.now().toString(),
-                    };
+                    // Save document to Supabase
+                    final apiService = ApiService();
+                    final documentType = selectedType == 'X-Ray' ? 'XRAY' : 'REPORT';
+                    
+                    try {
+                      final response = await apiService.uploadDocument(
+                        encounterId: encounterId,
+                        fileUrl: newFilePath,
+                        documentType: documentType,
+                      );
+                      
+                      final newFile = {
+                        'id': response['document']?['id'] ?? '',
+                        'name': selectedFileName!,
+                        'type': selectedType,
+                        'path': newFilePath,
+                        'uploadDate': DateTime.now().toString(),
+                      };
 
-                    if (!context.mounted) return;
-                    Navigator.pop(context, newFile);
+                      if (!context.mounted) return;
+                      Navigator.pop(context, newFile);
+                    } catch (apiError) {
+                      // File saved locally but failed to save to database
+                      debugPrint('Error saving document to database: $apiError');
+                      final newFile = {
+                        'name': selectedFileName!,
+                        'type': selectedType,
+                        'path': newFilePath,
+                        'uploadDate': DateTime.now().toString(),
+                      };
+                      if (!context.mounted) return;
+                      Navigator.pop(context, newFile);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('File saved locally. Database sync failed: $apiError'),
+                          backgroundColor: const Color(0xFFD97706),
+                        ),
+                      );
+                    }
                   } catch (e) {
                     if (!context.mounted) return;
                     Navigator.pop(context, null);
@@ -466,6 +476,16 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
                 }
               }
 
+              // Delete from Supabase if document has an ID
+              if (file?['id'] != null && file!['id']!.isNotEmpty) {
+                try {
+                  final apiService = ApiService();
+                  await apiService.deleteDocument(file['id']!);
+                } catch (e) {
+                  debugPrint('Error deleting document from database: $e');
+                }
+              }
+
               if (!context.mounted) return;
               Navigator.pop(context, true);
             },
@@ -498,7 +518,43 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
     return false;
   }
 
-  void _showEncounterDetails(Map<String, dynamic> encounter) {
+  Future<List<Map<String, String>>> _loadDocumentsFromSupabase(String encounterId) async {
+    try {
+      final apiService = ApiService();
+      final response = await apiService.getDocumentsForEncounter(encounterId);
+      
+      if (response is List) {
+        return response.map<Map<String, String>>((doc) {
+          return {
+            'id': doc['id']?.toString() ?? '',
+            'name': doc['file_url']?.toString().split('/').last ?? 'Unknown',
+            'type': doc['document_type'] == 'XRAY' ? 'X-Ray' : 'Lab Notes',
+            'path': doc['file_url']?.toString() ?? '',
+            'uploadDate': doc['created_at']?.toString() ?? '',
+          };
+        }).toList();
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Error loading documents: $e');
+      return [];
+    }
+  }
+
+  void _showEncounterDetails(Map<String, dynamic> encounter) async {
+    // Load documents from Supabase first
+    final encounterId = encounter['id'];
+    if (!_encounterFiles.containsKey(encounterId)) {
+      final docs = await _loadDocumentsFromSupabase(encounterId);
+      if (docs.isNotEmpty) {
+        setState(() {
+          _encounterFiles[encounterId] = docs;
+        });
+      }
+    }
+
+    if (!mounted) return;
+    
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => EncounterDetailPage(

@@ -239,4 +239,46 @@ class ApiService {
       requiresAuth: false,
     );
   }
+
+  // X-ray Analysis endpoint
+  Future<dynamic> analyzeXray({
+    required String imageBase64,
+    required String imageType,
+    required String bodyRegion,
+    String? patientContext,
+  }) async {
+    final body = {
+      'image_base64': imageBase64,
+      'image_type': imageType,
+      'body_region': bodyRegion,
+      if (patientContext != null) 'patient_context': patientContext,
+    };
+
+    return post('/analysis/xray', body, requiresAuth: false);
+  }
+
+  // Document endpoints
+  Future<dynamic> uploadDocument({
+    required String encounterId,
+    required String fileUrl,
+    required String documentType, // 'XRAY' or 'REPORT'
+    String? extractedText,
+  }) async {
+    final body = {
+      'encounter_id': encounterId,
+      'file_url': fileUrl,
+      'document_type': documentType,
+      if (extractedText != null) 'extracted_text': extractedText,
+    };
+
+    return post('/documents/upload', body, requiresAuth: false);
+  }
+
+  Future<dynamic> getDocumentsForEncounter(String encounterId) async {
+    return get('/documents/encounter/$encounterId', requiresAuth: false);
+  }
+
+  Future<dynamic> deleteDocument(String documentId) async {
+    return delete('/documents/$documentId', requiresAuth: false);
+  }
 }

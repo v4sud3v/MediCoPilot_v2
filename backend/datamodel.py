@@ -130,3 +130,32 @@ class PatientSummary(BaseModel):
 class PatientSummaryListResponse(BaseModel):
     summaries: List[PatientSummary]
     total: int
+
+
+# X-ray Analysis Models
+class XrayAnalysisRequest(BaseModel):
+    image_base64: str
+    image_type: Literal["X-Ray", "Lab Notes"]
+    body_region: Literal["chest", "head", "spine", "limb", "abdomen", "pelvis", "other"]
+    patient_context: Optional[str] = None
+
+
+class SpecialistFinding(BaseModel):
+    title: str
+    description: str
+    severity: Literal["High", "Medium", "Low"]
+    is_red_flag: bool = False
+
+
+class SpecialistAnalysis(BaseModel):
+    specialist: Literal["Cardiologist", "Neurologist", "Orthopedist"]
+    has_findings: bool
+    findings: List[SpecialistFinding]
+    overlooked_warnings: List[str]
+    recommended_actions: List[str]
+
+
+class XrayAnalysisResponse(BaseModel):
+    analyses: List[SpecialistAnalysis]
+    primary_specialist: Optional[str] = None
+    overall_summary: str
