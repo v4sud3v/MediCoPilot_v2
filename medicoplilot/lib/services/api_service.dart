@@ -258,6 +258,52 @@ class ApiService {
   }
 
   // Document endpoints
+  Future<dynamic> uploadFileToStorage({
+    required String encounterId,
+    required String filePath,
+    required String fileName,
+    required String documentType, // 'XRAY' or 'REPORT'
+    String? extractedText,
+  }) async {
+    try {
+      final url = Uri.parse('${ApiConfig.baseUrl}/documents/upload-file');
+
+      print('Uploading file to: $url');
+      print('File: $fileName, Encounter: $encounterId, Type: $documentType');
+
+      var request = http.MultipartRequest('POST', url);
+
+      // Add form fields
+      request.fields['encounter_id'] = encounterId;
+      request.fields['document_type'] = documentType;
+      if (extractedText != null && extractedText.isNotEmpty) {
+        request.fields['extracted_text'] = extractedText;
+      }
+
+      // Add file
+      request.files.add(
+        await http.MultipartFile.fromPath('file', filePath, filename: fileName),
+      );
+
+      // Send request
+      print('Sending multipart request...');
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 60), // Longer timeout for file uploads
+      );
+
+      // Convert streamed response to regular response
+      final response = await http.Response.fromStream(streamedResponse);
+
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
+      return _handleResponse(response);
+    } catch (e) {
+      print('Upload error: $e');
+      throw _handleError(e);
+    }
+  }
+
   Future<dynamic> uploadDocument({
     required String encounterId,
     required String fileUrl,
@@ -280,5 +326,21 @@ class ApiService {
 
   Future<dynamic> deleteDocument(String documentId) async {
     return delete('/documents/$documentId', requiresAuth: false);
+  }
+
+  /// Get a signed URL for a document in Supabase Storage.
+  /// Returns a temporary URL that's valid for 1 hour.
+  Future<String> getSignedUrl(String documentId) async {
+    final result = await get(
+      '/documents/$documentId/signed-url',
+      requiresAuth: false,
+    );
+    return result['signed_url'] as String;
+  }
+
+  /// Get the backend proxy download URL for a document.
+  /// This works regardless of Supabase bucket public/private settings.
+  String getDownloadUrl(String documentId) {
+    return '${ApiConfig.baseUrl}/documents/$documentId/download';
   }
 }

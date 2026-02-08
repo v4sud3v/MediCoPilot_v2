@@ -8,16 +8,16 @@ import 'services/auth_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Load .env file
   await dotenv.load(fileName: ".env");
-  
+
   // Initialize Supabase
   await Supabase.initialize(
     url: SupabaseConfig.supabaseUrl,
     anonKey: SupabaseConfig.supabaseAnonKey,
   );
-  
+
   runApp(const MyApp());
 }
 
@@ -43,21 +43,21 @@ class _MyAppState extends State<MyApp> {
       // First check if user is already authenticated
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {
-        print('✅ User already authenticated: ${user.email}');
+        debugPrint('✅ User already authenticated: ${user.email}');
         return true;
       }
-      
+
       // Try to restore session from saved token
       final restored = await _authService.restoreSession();
       if (restored) {
-        print('✅ Session restored successfully');
+        debugPrint('✅ Session restored successfully');
         return true;
       }
-      
-      print('ℹ️ No active session found');
+
+      debugPrint('ℹ️ No active session found');
       return false;
     } catch (e) {
-      print('Error checking login status: $e');
+      debugPrint('Error checking login status: $e');
       return false;
     }
   }
@@ -76,16 +76,14 @@ class _MyAppState extends State<MyApp> {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Scaffold(
-              body: Center(
-                child: CircularProgressIndicator(),
-              ),
+              body: Center(child: CircularProgressIndicator()),
             );
           }
-          
+
           if (snapshot.hasData && snapshot.data == true) {
             return const MainLayout();
           }
-          
+
           return const LoginPage();
         },
       ),

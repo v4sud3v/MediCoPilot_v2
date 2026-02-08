@@ -63,8 +63,8 @@ async def get_encounters_for_doctor(
             # Get patient info
             patient_response = supabase.table('patients').select(
                 'id, name, age, gender, contact_info, allergies'
-            ).eq('id', patient_id).single().execute()
-            
+            ).eq('id', patient_id).maybe_single().execute()
+
             if patient_response.data:
                 patient = patient_response.data
                 encounter['patient_name'] = patient.get('name', 'Unknown')
@@ -72,6 +72,13 @@ async def get_encounters_for_doctor(
                 encounter['patient_gender'] = patient.get('gender')
                 encounter['patient_contact'] = patient.get('contact_info')
                 encounter['patient_allergies'] = patient.get('allergies')
+            else:
+                # Set defaults if patient not found
+                encounter['patient_name'] = 'Unknown'
+                encounter['patient_age'] = None
+                encounter['patient_gender'] = None
+                encounter['patient_contact'] = None
+                encounter['patient_allergies'] = None
             
             encounters_with_patients.append(encounter)
 
@@ -120,8 +127,8 @@ async def get_encounters_by_case(case_id: str):
         patient_id = response.data[0]['patient_id']
         patient_response = supabase.table('patients').select(
             'id, name, age, gender, contact_info, allergies'
-        ).eq('id', patient_id).single().execute()
-        
+        ).eq('id', patient_id).maybe_single().execute()
+
         patient_data = patient_response.data if patient_response.data else {}
         
         # Add patient info to each encounter
@@ -177,8 +184,8 @@ async def get_encounter_details(encounter_id: str):
         # Fetch patient details
         patient_response = supabase.table('patients').select(
             'id, name, age, gender, contact_info, allergies'
-        ).eq('id', encounter['patient_id']).single().execute()
-        
+        ).eq('id', encounter['patient_id']).maybe_single().execute()
+
         if patient_response.data:
             patient = patient_response.data
             encounter['patient_name'] = patient.get('name', 'Unknown')

@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import '../services/encounter_service.dart';
 import '../services/api_service.dart';
 import 'new_encounter_page.dart';
@@ -56,7 +57,7 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
         });
       }
     } catch (e) {
-      print('Error loading case visits: $e');
+      debugPrint('Error loading case visits: $e');
       if (mounted) {
         setState(() {
           _isLoadingVisits = false;
@@ -1235,10 +1236,7 @@ class _XrayAnalyzeDialog extends StatefulWidget {
   final Map<String, String> file;
   final String patientContext;
 
-  const _XrayAnalyzeDialog({
-    required this.file,
-    required this.patientContext,
-  });
+  const _XrayAnalyzeDialog({required this.file, required this.patientContext});
 
   @override
   State<_XrayAnalyzeDialog> createState() => _XrayAnalyzeDialogState();
@@ -1275,12 +1273,51 @@ class _XrayAnalyzeDialogState extends State<_XrayAnalyzeDialog> {
         throw Exception('File path not found');
       }
 
-      final file = File(filePath);
-      if (!await file.exists()) {
-        throw Exception('File not found at $filePath');
-      }
+      final uri = Uri.tryParse(filePath);
+      final isRemote =
+          uri != null &&
+          uri.hasScheme &&
+          (uri.scheme == 'http' || uri.scheme == 'https');
 
-      final bytes = await file.readAsBytes();
+      List<int> bytes;
+      if (isRemote) {
+        // Use backend proxy download if we have a document ID (avoids Supabase bucket auth issues)
+        final docId = widget.file['id'];
+        final Uri downloadUri;
+        if (docId != null &&
+            docId.isNotEmpty &&
+            filePath.contains('supabase')) {
+          downloadUri = Uri.parse(_apiService.getDownloadUrl(docId));
+        } else {
+          downloadUri = uri;
+        }
+
+        final response = await http
+            .get(downloadUri)
+            .timeout(
+              const Duration(seconds: 30),
+              onTimeout: () => throw Exception(
+                'Download timed out. Check your network connection.',
+              ),
+            );
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw Exception(
+            'Failed to download file from cloud storage (HTTP ${response.statusCode})',
+          );
+        }
+        bytes = response.bodyBytes;
+        if (bytes.isEmpty) {
+          throw Exception('Downloaded file is empty');
+        }
+      } else {
+        final file = File(filePath);
+        if (!await file.exists()) {
+          throw Exception(
+            'File not found locally. It may have been moved or deleted.',
+          );
+        }
+        bytes = await file.readAsBytes();
+      }
       final base64Image = base64Encode(bytes);
 
       // Call the API
@@ -1426,7 +1463,9 @@ class _XrayAnalyzeDialogState extends State<_XrayAnalyzeDialog> {
                 },
                 selectedColor: const Color(0xFF2563EB).withAlpha(50),
                 labelStyle: TextStyle(
-                  color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade700,
+                  color: isSelected
+                      ? const Color(0xFF2563EB)
+                      : Colors.grey.shade700,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                 ),
               );
@@ -1444,12 +1483,19 @@ class _XrayAnalyzeDialogState extends State<_XrayAnalyzeDialog> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
+                  Icon(
+                    Icons.error_outline,
+                    color: Colors.red.shade700,
+                    size: 20,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       _error!,
-                      style: TextStyle(fontSize: 13, color: Colors.red.shade700),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.red.shade700,
+                      ),
                     ),
                   ),
                 ],
@@ -1533,7 +1579,12 @@ class _XrayAnalyzeDialogState extends State<_XrayAnalyzeDialog> {
               tabs: [
                 _buildTab('Cardio', Icons.favorite, analyses, 'Cardiologist'),
                 _buildTab('Neuro', Icons.psychology, analyses, 'Neurologist'),
-                _buildTab('Ortho', Icons.accessibility_new, analyses, 'Orthopedist'),
+                _buildTab(
+                  'Ortho',
+                  Icons.accessibility_new,
+                  analyses,
+                  'Orthopedist',
+                ),
               ],
             ),
           ),
@@ -1555,7 +1606,12 @@ class _XrayAnalyzeDialogState extends State<_XrayAnalyzeDialog> {
     );
   }
 
-  Widget _buildTab(String label, IconData icon, List<dynamic> analyses, String specialist) {
+  Widget _buildTab(
+    String label,
+    IconData icon,
+    List<dynamic> analyses,
+    String specialist,
+  ) {
     final analysis = analyses.firstWhere(
       (a) => a['specialist'] == specialist,
       orElse: () => null,
@@ -1614,12 +1670,19 @@ class _XrayAnalyzeDialogState extends State<_XrayAnalyzeDialog> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.check_circle, color: Colors.green.shade700, size: 24),
+                  Icon(
+                    Icons.check_circle,
+                    color: Colors.green.shade700,
+                    size: 24,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       'No significant $specialist findings detected.',
-                      style: TextStyle(fontSize: 14, color: Colors.green.shade700),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.green.shade700,
+                      ),
                     ),
                   ),
                 ],
@@ -1642,22 +1705,31 @@ class _XrayAnalyzeDialogState extends State<_XrayAnalyzeDialog> {
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            ...warnings.map((w) => Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.warning_amber, size: 16, color: Colors.orange.shade700),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      w.toString(),
-                      style: TextStyle(fontSize: 13, color: Colors.orange.shade800),
+            ...warnings.map(
+              (w) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.warning_amber,
+                      size: 16,
+                      color: Colors.orange.shade700,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        w.toString(),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.orange.shade800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            )),
+            ),
           ],
 
           if (actions.isNotEmpty) ...[
@@ -1667,22 +1739,31 @@ class _XrayAnalyzeDialogState extends State<_XrayAnalyzeDialog> {
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            ...actions.map((a) => Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.arrow_right, size: 16, color: Colors.blue.shade700),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      a.toString(),
-                      style: TextStyle(fontSize: 13, color: Colors.blue.shade800),
+            ...actions.map(
+              (a) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.arrow_right,
+                      size: 16,
+                      color: Colors.blue.shade700,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        a.toString(),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.blue.shade800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            )),
+            ),
           ],
         ],
       ),
@@ -1724,7 +1805,10 @@ class _XrayAnalyzeDialogState extends State<_XrayAnalyzeDialog> {
             children: [
               if (isRedFlag) ...[
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.red,
                     borderRadius: BorderRadius.circular(4),

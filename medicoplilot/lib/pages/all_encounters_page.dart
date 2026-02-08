@@ -6,7 +6,6 @@ import 'package:medicoplilot/services/api_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:path_provider/path_provider.dart';
 
 class AllEncountersPage extends StatefulWidget {
   const AllEncountersPage({super.key});
@@ -234,75 +233,92 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
               ),
               ElevatedButton.icon(
                 onPressed: () async {
-                  // Save file to app directory
+                  // Show loading indicator
+                  if (!context.mounted) return;
+
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (ctx) => const AlertDialog(
+                      content: Row(
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(width: 20),
+                          Text('Uploading to cloud...'),
+                        ],
+                      ),
+                    ),
+                  );
+
                   try {
-                    final appDir = await getApplicationDocumentsDirectory();
-                    final encounterDir = Directory(
-                      '${appDir.path}/encounters/$encounterId',
+                    final apiService = ApiService();
+                    final documentType = selectedType == 'X-Ray'
+                        ? 'XRAY'
+                        : 'REPORT';
+
+                    // Upload file to Supabase Storage via backend
+                    final response = await apiService.uploadFileToStorage(
+                      encounterId: encounterId,
+                      filePath: selectedFilePath!,
+                      fileName: selectedFileName!,
+                      documentType: documentType,
                     );
 
-                    if (!await encounterDir.exists()) {
-                      await encounterDir.create(recursive: true);
-                    }
-
-                    final timestamp = DateTime.now().millisecondsSinceEpoch;
-                    final newFileName = '${timestamp}_$selectedFileName';
-                    final newFilePath = '${encounterDir.path}/$newFileName';
-
-                    // Copy file to app directory
-                    await File(selectedFilePath!).copy(newFilePath);
-
-                    // Save document to Supabase
-                    final apiService = ApiService();
-                    final documentType = selectedType == 'X-Ray' ? 'XRAY' : 'REPORT';
-                    
-                    try {
-                      final response = await apiService.uploadDocument(
-                        encounterId: encounterId,
-                        fileUrl: newFilePath,
-                        documentType: documentType,
-                      );
-                      
-                      final newFile = {
-                        'id': response['document']?['id'] ?? '',
-                        'name': selectedFileName!,
-                        'type': selectedType,
-                        'path': newFilePath,
-                        'uploadDate': DateTime.now().toString(),
-                      };
-
-                      if (!context.mounted) return;
-                      Navigator.pop(context, newFile);
-                    } catch (apiError) {
-                      // File saved locally but failed to save to database
-                      debugPrint('Error saving document to database: $apiError');
-                      final newFile = {
-                        'name': selectedFileName!,
-                        'type': selectedType,
-                        'path': newFilePath,
-                        'uploadDate': DateTime.now().toString(),
-                      };
-                      if (!context.mounted) return;
-                      Navigator.pop(context, newFile);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('File saved locally. Database sync failed: $apiError'),
-                          backgroundColor: const Color(0xFFD97706),
-                        ),
-                      );
-                    }
-                  } catch (e) {
                     if (!context.mounted) return;
-                    Navigator.pop(context, null);
+
+                    // Close loading dialog first, then return to the upload dialog.
+                    Navigator.of(context, rootNavigator: true).pop();
+
+                    final newFile = <String, String>{
+                      'id': (response['document']?['id'] ?? '').toString(),
+                      'name': (selectedFileName).toString(),
+                      'type': selectedType.toString(),
+                      'path': (response['document']?['file_url'] ?? '')
+                          .toString(),
+                      'uploadDate': DateTime.now().toIso8601String(),
+                    };
+
+                    if (!context.mounted) return;
+                    await Future.delayed(const Duration(milliseconds: 50));
+                    if (!context.mounted) return;
+                    Navigator.of(context).pop(newFile);
+                  } catch (apiError) {
+                    print('Upload error: $apiError');
+                    if (!context.mounted) return;
+
+                    // Close loading dialog first, then close the upload dialog.
+                    Navigator.of(context, rootNavigator: true).pop();
+
+                    // Wait a frame before closing upload dialog
+                    await Future.delayed(const Duration(milliseconds: 50));
+
+                    if (!context.mounted) return;
+
+                    // Close upload dialog
+                    Navigator.of(context).pop(null);
+
+                    // Show detailed error
+                    String errorMessage = apiError.toString();
+                    if (errorMessage.contains('Connection refused')) {
+                      errorMessage =
+                          'Cannot connect to server. Please ensure the backend is running.';
+                    } else if (errorMessage.contains('SocketException')) {
+                      errorMessage =
+                          'Network error. Check your connection and server URL.';
+                    }
+
+                    if (!context.mounted) return;
+
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Error uploading file: $e'),
+                        content: Text('Upload failed: $errorMessage'),
                         backgroundColor: const Color(0xFFDC2626),
+                        duration: const Duration(seconds: 5),
                       ),
                     );
                   }
                 },
-                icon: const Icon(Icons.upload),
+                icon: const Icon(Icons.cloud_upload),
                 label: const Text('Upload'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF2563EB),
@@ -326,7 +342,9 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('${uploadedFile['type']} uploaded successfully'),
+              content: Text(
+                '${uploadedFile['type']} uploaded successfully to cloud storage',
+              ),
               backgroundColor: const Color(0xFF059669),
             ),
           );
@@ -336,6 +354,38 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
       }
     }
     return null;
+  }
+
+  bool _isRemotePath(String path) {
+    final uri = Uri.tryParse(path);
+    if (uri == null) return false;
+    if (!uri.hasScheme) return false;
+    return uri.scheme == 'http' || uri.scheme == 'https';
+  }
+
+  bool _isImageFile(String path) {
+    final lower = path.toLowerCase();
+    return lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.gif') ||
+        lower.endsWith('.bmp') ||
+        lower.endsWith('.webp');
+  }
+
+  /// Get a viewable URL for a file. If it has a document ID and is a Supabase URL,
+  /// use the backend proxy to avoid auth issues.
+  String _getViewableUrl(Map<String, String> file) {
+    final docId = file['id'];
+    final filePath = file['path'] ?? '';
+    // If we have a document ID and it's a Supabase URL, use backend download proxy
+    if (docId != null &&
+        docId.isNotEmpty &&
+        _isRemotePath(filePath) &&
+        filePath.contains('supabase')) {
+      return ApiService().getDownloadUrl(docId);
+    }
+    return filePath;
   }
 
   void _viewFile(Map<String, String> file) async {
@@ -350,67 +400,81 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
       return;
     }
 
+    // For remote URLs (Supabase Storage), show in-app viewer for images
+    if (_isRemotePath(filePath)) {
+      if (_isImageFile(filePath) || file['type'] == 'X-Ray') {
+        _showInAppImageViewer(file);
+      } else {
+        // For PDFs/docs, try signed URL or fallback to direct URL
+        String urlToOpen = filePath;
+        final docId = file['id'];
+        if (docId != null &&
+            docId.isNotEmpty &&
+            filePath.contains('supabase')) {
+          try {
+            urlToOpen = await ApiService().getSignedUrl(docId);
+          } catch (_) {
+            // Fallback to original URL
+          }
+        }
+        final uri = Uri.parse(urlToOpen);
+        try {
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          } else {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Unable to open file link'),
+                backgroundColor: Color(0xFFDC2626),
+              ),
+            );
+          }
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error opening file: $e'),
+              backgroundColor: const Color(0xFFDC2626),
+            ),
+          );
+        }
+      }
+      return;
+    }
+
+    // Local file: check if it exists, try to view
     final fileExists = await File(filePath).exists();
     if (!fileExists) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('File not found on device'),
+          content: Text(
+            'File not found locally. It may have been moved or deleted.',
+          ),
           backgroundColor: Color(0xFFDC2626),
         ),
       );
       return;
     }
 
-    // Open file with default application
+    // Local image → show in-app viewer
+    if (_isImageFile(filePath) || file['type'] == 'X-Ray') {
+      _showInAppImageViewer(file);
+      return;
+    }
+
+    // Other local files → open with system app
     final uri = Uri.file(filePath);
     try {
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri);
       } else {
-        // Fallback: show file info dialog
         if (!mounted) return;
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Row(
-              children: [
-                const Icon(Icons.insert_drive_file, color: Color(0xFF2563EB)),
-                const SizedBox(width: 12),
-                Expanded(child: Text(file['name'] ?? 'Document')),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildFileInfoRow('Type', file['type'] ?? 'Unknown'),
-                _buildFileInfoRow('Location', filePath),
-                _buildFileInfoRow('Uploaded', file['uploadDate'] ?? 'Unknown'),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Close'),
-              ),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  // Try to open with system file manager
-                  final directory = Directory(filePath).parent;
-                  final dirUri = Uri.directory(directory.path);
-                  if (await canLaunchUrl(dirUri)) {
-                    await launchUrl(dirUri);
-                  }
-                },
-                icon: const Icon(Icons.folder_open),
-                label: const Text('Open Folder'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2563EB),
-                  foregroundColor: Colors.white,
-                ),
-              ),
-            ],
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to open file'),
+            backgroundColor: Color(0xFFDC2626),
           ),
         );
       }
@@ -425,26 +489,251 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
     }
   }
 
-  Widget _buildFileInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade600,
-            ),
+  void _showInAppImageViewer(Map<String, String> file) {
+    final rawPath = file['path'] ?? '';
+    final isRemote = _isRemotePath(rawPath);
+    // Use proxy URL for Supabase files to avoid 400 auth errors
+    final filePath = isRemote ? _getViewableUrl(file) : rawPath;
+
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(24),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 900, maxHeight: 700),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
           ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 14, color: Color(0xFF1E293B)),
+          child: Column(
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.image_outlined,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            file['name'] ?? 'Document',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${file['type'] ?? 'Unknown'} • ${isRemote ? 'Cloud Storage' : 'Local File'}',
+                            style: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (isRemote)
+                      IconButton(
+                        icon: const Icon(
+                          Icons.open_in_new,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        tooltip: 'Open in browser',
+                        onPressed: () async {
+                          final uri = Uri.parse(filePath);
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(
+                              uri,
+                              mode: LaunchMode.externalApplication,
+                            );
+                          }
+                        },
+                      ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              // Image
+              Expanded(
+                child: Container(
+                  color: Colors.black87,
+                  child: InteractiveViewer(
+                    minScale: 0.5,
+                    maxScale: 4.0,
+                    child: Center(
+                      child: isRemote
+                          ? Image.network(
+                              filePath,
+                              fit: BoxFit.contain,
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      CircularProgressIndicator(
+                                        value:
+                                            loadingProgress
+                                                    .expectedTotalBytes !=
+                                                null
+                                            ? loadingProgress
+                                                      .cumulativeBytesLoaded /
+                                                  loadingProgress
+                                                      .expectedTotalBytes!
+                                            : null,
+                                        color: const Color(0xFF2563EB),
+                                      ),
+                                      const SizedBox(height: 16),
+                                      const Text(
+                                        'Loading from cloud...',
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                              errorBuilder: (context, error, stackTrace) {
+                                return Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.broken_image_outlined,
+                                        size: 64,
+                                        color: Colors.grey.shade500,
+                                      ),
+                                      const SizedBox(height: 16),
+                                      const Text(
+                                        'Failed to load image',
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        error.toString(),
+                                        style: TextStyle(
+                                          color: Colors.grey.shade500,
+                                          fontSize: 12,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            )
+                          : Image.file(
+                              File(filePath),
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.broken_image_outlined,
+                                        size: 64,
+                                        color: Colors.grey.shade500,
+                                      ),
+                                      const SizedBox(height: 16),
+                                      const Text(
+                                        'Failed to load image',
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+              // Footer
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(16),
+                    bottomRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      isRemote ? Icons.cloud_done : Icons.folder,
+                      size: 16,
+                      color: Colors.grey.shade600,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        isRemote
+                            ? 'Stored in Supabase Cloud Storage'
+                            : filePath,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Pinch or scroll to zoom',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade500,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -465,9 +754,10 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
           ElevatedButton(
             onPressed: () async {
               // Delete physical file
-              if (file?['path'] != null) {
+              final path = file?['path'];
+              if (path != null && path.isNotEmpty && !_isRemotePath(path)) {
                 try {
-                  final fileToDelete = File(file!['path']!);
+                  final fileToDelete = File(path);
                   if (await fileToDelete.exists()) {
                     await fileToDelete.delete();
                   }
@@ -518,11 +808,13 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
     return false;
   }
 
-  Future<List<Map<String, String>>> _loadDocumentsFromSupabase(String encounterId) async {
+  Future<List<Map<String, String>>> _loadDocumentsFromSupabase(
+    String encounterId,
+  ) async {
     try {
       final apiService = ApiService();
       final response = await apiService.getDocumentsForEncounter(encounterId);
-      
+
       if (response is List) {
         return response.map<Map<String, String>>((doc) {
           return {
@@ -554,7 +846,7 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
     }
 
     if (!mounted) return;
-    
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => EncounterDetailPage(
