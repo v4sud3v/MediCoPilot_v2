@@ -848,6 +848,7 @@ class _PatientEducationPageState extends State<PatientEducationPage>
           ),
           OutlinedButton.icon(
             onPressed: () async {
+              final navigator = Navigator.of(context);
               // Save changes
               await _updateEducation(
                 education['id'],
@@ -858,7 +859,7 @@ class _PatientEducationPageState extends State<PatientEducationPage>
               titleController.dispose();
               descriptionController.dispose();
               contentController.dispose();
-              if (mounted) Navigator.pop(context);
+              if (mounted) navigator.pop();
             },
             icon: const Icon(Icons.save, size: 18),
             label: const Text('Save Changes'),
@@ -869,6 +870,7 @@ class _PatientEducationPageState extends State<PatientEducationPage>
           ),
           ElevatedButton.icon(
             onPressed: () async {
+              final navigator = Navigator.of(context);
               // Save and send
               await _updateEducation(
                 education['id'],
@@ -880,8 +882,8 @@ class _PatientEducationPageState extends State<PatientEducationPage>
               descriptionController.dispose();
               contentController.dispose();
               if (mounted) {
-                Navigator.pop(context);
-                _showSendDialog(context, education);
+                navigator.pop();
+                _showSendDialog(this.context, education);
               }
             },
             icon: const Icon(Icons.send, size: 18),

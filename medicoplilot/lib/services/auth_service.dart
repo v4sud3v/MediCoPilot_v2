@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'token_service.dart';
 
@@ -23,7 +24,7 @@ class AuthService {
       email: email,
       password: password,
     );
-    
+
     // Save session data for persistence
     if (response.user != null && response.session != null) {
       await _tokenService.saveToken(response.session!.accessToken);
@@ -31,9 +32,8 @@ class AuthService {
         'id': response.user!.id,
         'email': response.user!.email,
       });
-      print('✅ User signed in and session saved.');
     }
-    
+
     return response;
   }
 
@@ -44,13 +44,11 @@ class AuthService {
       if (token != null) {
         // Check if user is still valid
         if (currentUser != null) {
-          print('✅ Session restored from token.');
           return true;
         }
       }
       return false;
     } catch (e) {
-      print('Error restoring session: $e');
       return false;
     }
   }
@@ -78,12 +76,8 @@ class AuthService {
           'email': email,
           'specialization': specialization,
         }).select();
-        
-        print('✅ Successfully inserted doctor: $result');
+        debugPrint('✅ Successfully inserted doctor: $result');
       } catch (e) {
-        print('❌ Error inserting into doctors table: $e');
-        print('User ID: ${response.user!.id}');
-        print('Email: $email');
         // Don't rethrow - allow signup to complete even if doctor insert fails
       }
     }
@@ -96,7 +90,6 @@ class AuthService {
     await _supabase.auth.signOut();
     // Clear saved session data
     await _tokenService.clearAll();
-    print('✅ User signed out and session cleared.');
   }
 
   // Get doctor details from doctors table
@@ -126,10 +119,7 @@ class AuthService {
     if (specialization != null) updates['specialization'] = specialization;
 
     if (updates.isNotEmpty) {
-      await _supabase
-          .from('doctors')
-          .update(updates)
-          .eq('id', currentUser!.id);
+      await _supabase.from('doctors').update(updates).eq('id', currentUser!.id);
     }
   }
 

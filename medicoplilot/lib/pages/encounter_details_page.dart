@@ -802,7 +802,7 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
                   ],
                 ),
               );
-            }).toList(),
+            }),
         ],
       ),
     );

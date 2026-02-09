@@ -111,7 +111,6 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
         });
       }
     } catch (e) {
-      print('Error loading case visits: $e');
       if (mounted) {
         setState(() {
           _isLoadingVisits = false;
@@ -907,7 +906,7 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
                         ),
                     ],
                   );
-                }).toList(),
+                }),
               ],
             ),
           );
@@ -1155,9 +1154,7 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
             patientId: widget.selectedPatientId!,
             allergies: _allergiesController.text.trim(),
           );
-          print('✅ Patient allergies updated successfully');
         } catch (e) {
-          print('⚠️ Warning: Failed to update allergies: $e');
           // Don't stop the flow if allergies update fails
         }
       }

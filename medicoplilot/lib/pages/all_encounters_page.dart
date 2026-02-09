@@ -67,7 +67,6 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
         });
       }
     } catch (e) {
-      print('Error loading encounters: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -283,7 +282,6 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
                     if (!context.mounted) return;
                     Navigator.of(context).pop(newFile);
                   } catch (apiError) {
-                    print('Upload error: $apiError');
                     if (!context.mounted) return;
 
                     // Close loading dialog first, then close the upload dialog.
@@ -1305,7 +1303,7 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
               final visitIndex = entry.key;
               final visit = entry.value;
               return _buildVisitTile(visit, visitIndex, visits);
-            }).toList(),
+            }),
           ],
         ],
       ),

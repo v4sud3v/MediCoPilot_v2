@@ -32,7 +32,7 @@ class _MainLayoutState extends State<MainLayout> {
     _searchController.addListener(_onSearchChanged);
     _initializePages();
   }
-  
+
   void _initializePages() {
     _pages = [
       NewEncounterPage(
@@ -79,7 +79,6 @@ class _MainLayoutState extends State<MainLayout> {
         _isLoadingResults = false;
       });
     } catch (e) {
-      print('Error searching patients: $e');
       setState(() {
         _searchResults = [];
         _isLoadingResults = false;
@@ -96,8 +95,10 @@ class _MainLayoutState extends State<MainLayout> {
   void _selectPatient(PatientSearchResult patient) async {
     // First, fetch full patient details
     try {
-      final patientDetails = await _encounterService.getPatientDetails(patient.id);
-      
+      final patientDetails = await _encounterService.getPatientDetails(
+        patient.id,
+      );
+
       setState(() {
         _selectedPatient = patient.name;
         _selectedPatientId = patient.id;
@@ -108,6 +109,7 @@ class _MainLayoutState extends State<MainLayout> {
         _initializePages();
       });
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Selected patient: ${patient.name}'),
@@ -116,7 +118,7 @@ class _MainLayoutState extends State<MainLayout> {
         ),
       );
     } catch (e) {
-      print('Error fetching patient details: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error loading patient details: ${e.toString()}'),
@@ -286,43 +288,43 @@ class _MainLayoutState extends State<MainLayout> {
                     ),
                   )
                 : _searchResults.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Text(
-                          'No patients found',
-                          style: TextStyle(color: Colors.grey),
+                ? const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text(
+                      'No patients found',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _searchResults.length,
+                    itemBuilder: (context, index) {
+                      final patient = _searchResults[index];
+                      return ListTile(
+                        dense: true,
+                        leading: const CircleAvatar(
+                          radius: 16,
+                          backgroundColor: Color(0xFF2563EB),
+                          child: Icon(
+                            Icons.person,
+                            size: 16,
+                            color: Colors.white,
+                          ),
                         ),
-                      )
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: _searchResults.length,
-                        itemBuilder: (context, index) {
-                          final patient = _searchResults[index];
-                          return ListTile(
-                            dense: true,
-                            leading: const CircleAvatar(
-                              radius: 16,
-                              backgroundColor: Color(0xFF2563EB),
-                              child: Icon(
-                                Icons.person,
-                                size: 16,
-                                color: Colors.white,
-                              ),
-                            ),
-                            title: Text(
-                              patient.name,
-                              style: const TextStyle(fontSize: 14),
-                            ),
-                            subtitle: Text(
-                              patient.age != null
-                                  ? '${patient.age} years old${patient.gender != null ? ' • ${patient.gender}' : ''}'
-                                  : patient.gender ?? 'No details',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                            onTap: () => _selectPatient(patient),
-                          );
-                        },
-                      ),
+                        title: Text(
+                          patient.name,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                        subtitle: Text(
+                          patient.age != null
+                              ? '${patient.age} years old${patient.gender != null ? ' • ${patient.gender}' : ''}'
+                              : patient.gender ?? 'No details',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        onTap: () => _selectPatient(patient),
+                      );
+                    },
+                  ),
           ),
       ],
     );

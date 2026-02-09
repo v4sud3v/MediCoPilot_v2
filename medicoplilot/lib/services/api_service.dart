@@ -268,9 +268,6 @@ class ApiService {
     try {
       final url = Uri.parse('${ApiConfig.baseUrl}/documents/upload-file');
 
-      print('Uploading file to: $url');
-      print('File: $fileName, Encounter: $encounterId, Type: $documentType');
-
       var request = http.MultipartRequest('POST', url);
 
       // Add form fields
@@ -286,7 +283,6 @@ class ApiService {
       );
 
       // Send request
-      print('Sending multipart request...');
       final streamedResponse = await request.send().timeout(
         const Duration(seconds: 60), // Longer timeout for file uploads
       );
@@ -294,12 +290,8 @@ class ApiService {
       // Convert streamed response to regular response
       final response = await http.Response.fromStream(streamedResponse);
 
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
-
       return _handleResponse(response);
     } catch (e) {
-      print('Upload error: $e');
       throw _handleError(e);
     }
   }
