@@ -17,6 +17,7 @@ CREATE TABLE public.patients (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   doctor_id uuid,
   name text NOT NULL,
+  email text,
   age integer,
   gender text,
   allergies text,
