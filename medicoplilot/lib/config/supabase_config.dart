@@ -8,6 +8,6 @@ class SupabaseConfig {
 
 class ApiConfig {
   // Backend API configuration
-  static const String baseUrl = 'http://localhost:8000';
+  static const String baseUrl = 'http://localhost:8001';
   static const Duration timeout = Duration(seconds: 30);
 }

@@ -9,9 +9,24 @@ from datamodel import (
     PatientSummaryListResponse
 )
 import os
+import re
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from typing import Optional
 from datetime import datetime
 import uuid
+
+
+def markdown_to_html(text: str) -> str:
+    """Convert markdown bold (**text**) and italic (*text*) to HTML tags."""
+    # Convert **bold** to <strong>bold</strong> (must be done before italic)
+    text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+    # Convert *italic* to <em>italic</em>
+    text = re.sub(r'\*(.+?)\*', r'<em>\1</em>', text)
+    # Convert newlines to <br>
+    text = text.replace('\n', '<br>\n')
+    return text
 
 router = APIRouter(prefix="/patient-education", tags=["Patient Education"])
 
@@ -273,7 +288,7 @@ async def update_education(education_id: str, request: UpdateEducationRequest):
 @router.post("/{education_id}/send", response_model=UpdateEducationResponse)
 async def send_education(education_id: str):
     """
-    Mark a patient education document as sent.
+    Mark a patient education document as sent and email it to the patient.
     """
     try:
         uuid.UUID(education_id)
@@ -281,18 +296,104 @@ async def send_education(education_id: str):
         raise HTTPException(status_code=400, detail="Invalid education ID format")
 
     try:
-        response = supabase.table('patient_education').update({
+        # Fetch the education record
+        edu_response = supabase.table('patient_education').select('*').eq(
+            'id', education_id
+        ).single().execute()
+
+        if not edu_response.data:
+            raise HTTPException(status_code=404, detail="Patient education not found")
+
+        edu = edu_response.data
+
+        # Fetch patient email from patients table
+        patient_response = supabase.table('patients').select(
+            'name, email'
+        ).eq('id', edu['patient_id']).single().execute()
+
+        if not patient_response.data or not patient_response.data.get('email'):
+            raise HTTPException(status_code=400, detail="Patient email not found. Cannot send education.")
+
+        patient_email = patient_response.data['email']
+        patient_name = patient_response.data.get('name', 'Patient')
+
+        # Send email via SMTP (Gmail)
+        smtp_email = os.getenv("SMTP_EMAIL")
+        smtp_password = os.getenv("SMTP_APP_PASSWORD")
+
+        if not smtp_email or not smtp_password:
+            raise HTTPException(status_code=500, detail="SMTP email credentials not configured")
+
+        # Build email
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"MediCoPilot - {edu['title']}"
+        msg["From"] = smtp_email
+        msg["To"] = patient_email
+
+        # Plain text version
+        plain_text = f"""Dear {patient_name},
+
+Your doctor has shared the following health education material with you:
+
+{edu['title']}
+
+{edu.get('description', '')}
+
+{edu['content']}
+
+---
+This email was sent via MediCoPilot. Please consult your doctor for any questions.
+"""
+
+        # HTML version
+        html_content = f"""
+<html>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 10px 10px 0 0;">
+        <h1 style="color: white; margin: 0;">MediCoPilot</h1>
+        <p style="color: #e0e0e0; margin: 5px 0 0 0;">Patient Health Education</p>
+    </div>
+    <div style="background: #ffffff; padding: 25px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px;">
+        <p>Dear <strong>{patient_name}</strong>,</p>
+        <p>Your doctor has shared the following health education material with you:</p>
+        <h2 style="color: #333;">{edu['title']}</h2>
+        {f'<p style="color: #666; font-style: italic;">{edu.get("description", "")}</p>' if edu.get('description') else ''}
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #667eea; margin: 15px 0; white-space: pre-wrap;">
+{markdown_to_html(edu['content'])}
+        </div>
+        <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;">
+        <p style="color: #999; font-size: 12px;">This email was sent via MediCoPilot. Please consult your doctor for any questions.</p>
+    </div>
+</body>
+</html>
+"""
+
+        msg.attach(MIMEText(plain_text, "plain"))
+        msg.attach(MIMEText(html_content, "html"))
+
+        # Send via Gmail SMTP
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(smtp_email, smtp_password)
+            server.sendmail(smtp_email, patient_email, msg.as_string())
+
+        # Update status to 'sent' in database
+        supabase.table('patient_education').update({
             'status': 'sent',
             'sent_at': datetime.utcnow().isoformat()
         }).eq('id', education_id).execute()
 
-        if not response.data:
-            raise HTTPException(status_code=404, detail="Patient education not found")
-
-        return UpdateEducationResponse(success=True, message="Patient education sent successfully")
+        return UpdateEducationResponse(
+            success=True,
+            message=f"Patient education sent successfully to {patient_email}"
+        )
 
     except HTTPException:
         raise
+    except smtplib.SMTPAuthenticationError:
+        raise HTTPException(status_code=500, detail="SMTP authentication failed. Check app password.")
+    except smtplib.SMTPException as e:
+        print(f"SMTP error sending patient education: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
     except Exception as e:
         print(f"Error sending patient education: {e}")
         raise HTTPException(status_code=500, detail=f"Error sending patient education: {str(e)}")

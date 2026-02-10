@@ -110,8 +110,8 @@ def parse_model_output(output: str) -> tuple:
                     continue
                 
                 title, description = title_desc.split(':', 1)
-                title = title.strip()
-                description = description.strip()
+                title = title.strip().replace('**', '')
+                description = description.strip().replace('**', '')
                 
                 # Extract level/severity/priority
                 level = 'Medium'

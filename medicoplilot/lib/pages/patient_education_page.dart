@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 
@@ -498,8 +499,8 @@ class _PatientEducationPageState extends State<PatientEducationPage>
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        education['content']
+                      MarkdownBody(
+                        data: education['content']
                             .toString()
                             .replaceAll('\n', ' ')
                             .substring(
@@ -508,11 +509,11 @@ class _PatientEducationPageState extends State<PatientEducationPage>
                                   ? 200
                                   : education['content'].toString().length,
                             ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF1E293B),
+                        styleSheet: MarkdownStyleSheet(
+                          p: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF1E293B),
+                          ),
                         ),
                       ),
                     ],
@@ -647,9 +648,11 @@ class _PatientEducationPageState extends State<PatientEducationPage>
         content: SizedBox(
           width: 600,
           child: SingleChildScrollView(
-            child: Text(
-              education['content'] ?? '',
-              style: const TextStyle(fontSize: 13, height: 1.6),
+            child: MarkdownBody(
+              data: education['content'] ?? '',
+              styleSheet: MarkdownStyleSheet(
+                p: const TextStyle(fontSize: 13, height: 1.6),
+              ),
             ),
           ),
         ),

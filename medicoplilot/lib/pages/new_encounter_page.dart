@@ -1074,6 +1074,7 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    
 
     if (widget.selectedPatientId == null || widget.selectedPatientId!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
