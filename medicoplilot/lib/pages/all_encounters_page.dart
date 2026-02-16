@@ -55,10 +55,8 @@ class _AllEncountersPageState extends State<AllEncountersPage> {
         return;
       }
 
-      // Fetch encounters for the logged-in doctor
-      final encounters = await _encounterService.getEncountersForDoctor(
-        currentUser.id,
-      );
+      // Fetch all encounters across all doctors
+      final encounters = await _encounterService.getAllEncounters();
 
       if (mounted) {
         setState(() {

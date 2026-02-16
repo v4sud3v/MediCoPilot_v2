@@ -3,11 +3,17 @@ import 'package:flutter/material.dart';
 class Sidebar extends StatelessWidget {
   final int selectedIndex;
   final Function(int) onItemSelected;
+  final VoidCallback? onLogout;
+  final String doctorName;
+  final String doctorEmail;
 
   const Sidebar({
     super.key,
     this.selectedIndex = 0,
     required this.onItemSelected,
+    this.onLogout,
+    this.doctorName = 'Doctor',
+    this.doctorEmail = '',
   });
 
   @override
@@ -30,10 +36,10 @@ class Sidebar extends StatelessWidget {
           // Header
           Container(
             padding: const EdgeInsets.all(20),
-            child: const Column(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Clinical Dashboard',
                   style: TextStyle(
                     fontSize: 18,
@@ -41,10 +47,10 @@ class Sidebar extends StatelessWidget {
                     color: Color(0xFF2563EB),
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
-                  "Dr. Smith's Practice",
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  "$doctorName's Practice",
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ],
             ),
@@ -86,9 +92,16 @@ class Sidebar extends StatelessWidget {
                 CircleAvatar(
                   radius: 18,
                   backgroundColor: const Color(0xFF2563EB),
-                  child: const Text(
-                    'DS',
-                    style: TextStyle(
+                  child: Text(
+                    doctorName.isNotEmpty
+                        ? doctorName
+                              .split(' ')
+                              .map((w) => w.isNotEmpty ? w[0] : '')
+                              .take(2)
+                              .join()
+                              .toUpperCase()
+                        : '?',
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -96,23 +109,34 @@ class Sidebar extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Dr. Smith',
-                        style: TextStyle(
+                        doctorName,
+                        style: const TextStyle(
                           fontWeight: FontWeight.w500,
                           fontSize: 14,
                         ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        'doctor@clinic.com',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                        doctorEmail,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.logout, size: 20),
+                  color: Colors.grey[600],
+                  tooltip: 'Logout',
+                  onPressed: onLogout,
                 ),
               ],
             ),

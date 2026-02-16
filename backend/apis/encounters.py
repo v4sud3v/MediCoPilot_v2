@@ -14,6 +14,66 @@ supabase: Client = create_client(
 )
 
 
+@router.get("/all", tags=["Encounters"])
+async def get_all_encounters(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    """
+    Fetch all encounters across all doctors.
+    
+    Args:
+        limit: Maximum number of encounters to return (default: 100)
+        offset: Pagination offset (default: 0)
+    
+    Returns:
+        List of all encounters with patient information
+    """
+    try:
+        response = supabase.table('encounters').select(
+            'id, patient_id, doctor_id, case_id, visit_number, chief_complaint, '
+            'history_of_illness, temperature, blood_pressure, heart_rate, '
+            'respiratory_rate, oxygen_saturation, weight, height, physical_exam, '
+            'diagnosis, medications, created_at'
+        ).order(
+            'created_at', desc=True
+        ).range(
+            offset, offset + limit - 1
+        ).execute()
+
+        if not response.data:
+            return []
+
+        encounters_with_patients = []
+        for encounter in response.data:
+            patient_id = encounter['patient_id']
+            patient_response = supabase.table('patients').select(
+                'id, name, age, gender, contact_info, allergies'
+            ).eq('id', patient_id).maybe_single().execute()
+
+            if patient_response.data:
+                patient = patient_response.data
+                encounter['patient_name'] = patient.get('name', 'Unknown')
+                encounter['patient_age'] = patient.get('age')
+                encounter['patient_gender'] = patient.get('gender')
+                encounter['patient_contact'] = patient.get('contact_info')
+                encounter['patient_allergies'] = patient.get('allergies')
+            else:
+                encounter['patient_name'] = 'Unknown'
+                encounter['patient_age'] = None
+                encounter['patient_gender'] = None
+                encounter['patient_contact'] = None
+                encounter['patient_allergies'] = None
+
+            encounters_with_patients.append(encounter)
+
+        return encounters_with_patients
+
+    except Exception as e:
+        print(f"Error fetching all encounters: {e}")
+        raise HTTPException(status_code=500, detail=f"Error fetching all encounters: {str(e)}")
+
+
 @router.get("/doctor/{doctor_id}", tags=["Encounters"])
 async def get_encounters_for_doctor(
     doctor_id: str,
@@ -21,7 +81,8 @@ async def get_encounters_for_doctor(
     offset: int = Query(0, ge=0),
 ):
     """
-    Fetch all encounters for a specific doctor.
+    Fetch all encounters for patients linked to this doctor (via doctor_patients),
+    regardless of which doctor recorded the encounter.
     
     Args:
         doctor_id: UUID of the doctor
@@ -38,14 +99,24 @@ async def get_encounters_for_doctor(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid doctor ID format")
 
-        # Fetch encounters for this doctor, ordered by date (newest first)
+        # Step 1: Get all patient IDs linked to this doctor
+        dp_response = supabase.table('doctor_patients').select(
+            'patient_id'
+        ).eq('doctor_id', doctor_id).execute()
+
+        patient_ids = [row['patient_id'] for row in (dp_response.data or [])]
+
+        if not patient_ids:
+            return []
+
+        # Step 2: Fetch encounters for all those patients (from ANY doctor)
         response = supabase.table('encounters').select(
             'id, patient_id, doctor_id, case_id, visit_number, chief_complaint, '
             'history_of_illness, temperature, blood_pressure, heart_rate, '
             'respiratory_rate, oxygen_saturation, weight, height, physical_exam, '
             'diagnosis, medications, created_at'
-        ).eq(
-            'doctor_id', doctor_id
+        ).in_(
+            'patient_id', patient_ids
         ).order(
             'created_at', desc=True
         ).range(

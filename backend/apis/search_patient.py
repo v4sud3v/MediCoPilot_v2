@@ -39,24 +39,44 @@ class PatientSearchResult:
 
 
 @router.get("/patients", tags=["Search"])
-async def search_patients(query: str = "", limit: int = 10) -> List[dict]:
+async def search_patients(query: str = "", limit: int = 10, doctor_id: str = None) -> List[dict]:
     """
     Search for patients by name or contact info.
+    If doctor_id is provided, only return patients linked to that doctor
+    via doctor_patients table.
     
     Args:
         query: Search term (patient name or contact info)
         limit: Maximum number of results to return (default: 10)
+        doctor_id: Optional doctor UUID to scope results to that doctor's patients
     
     Returns:
         List of matching patient records
     """
     
-    if not query or query.strip() == "":
-        # Return recent patients if no query
+    # If doctor_id is given, resolve linked patient IDs first
+    linked_patient_ids = None
+    if doctor_id and doctor_id.strip():
         try:
-            response = supabase.table("patients").select(
+            dp_response = supabase.table("doctor_patients").select(
+                "patient_id"
+            ).eq("doctor_id", doctor_id.strip()).execute()
+            linked_patient_ids = [row["patient_id"] for row in (dp_response.data or [])]
+            if not linked_patient_ids:
+                return []  # Doctor has no linked patients yet
+        except Exception as e:
+            print(f"Error fetching doctor_patients: {e}")
+            # Fall through to unscoped search
+    
+    if not query or query.strip() == "":
+        # Return recent patients (optionally scoped to doctor)
+        try:
+            q = supabase.table("patients").select(
                 "id, name, age, gender, contact_info"
-            ).order("created_at", desc=True).limit(limit).execute()
+            )
+            if linked_patient_ids is not None:
+                q = q.in_("id", linked_patient_ids)
+            response = q.order("created_at", desc=True).limit(limit).execute()
             
             return [patient for patient in response.data]
         except Exception as e:
@@ -68,18 +88,24 @@ async def search_patients(query: str = "", limit: int = 10) -> List[dict]:
         query_lower = query.lower().strip()
         
         # Search for patients where name contains query (case-insensitive)
-        response = supabase.table("patients").select(
+        q = supabase.table("patients").select(
             "id, name, age, gender, contact_info"
-        ).ilike("name", f"%{query_lower}%").limit(limit).execute()
+        ).ilike("name", f"%{query_lower}%")
+        if linked_patient_ids is not None:
+            q = q.in_("id", linked_patient_ids)
+        response = q.limit(limit).execute()
         
         results = response.data if response.data else []
         
         # If results are less than limit, also search by contact info
         if len(results) < limit:
             remaining = limit - len(results)
-            contact_response = supabase.table("patients").select(
+            cq = supabase.table("patients").select(
                 "id, name, age, gender, contact_info"
-            ).ilike("contact_info", f"%{query_lower}%").limit(remaining).execute()
+            ).ilike("contact_info", f"%{query_lower}%")
+            if linked_patient_ids is not None:
+                cq = cq.in_("id", linked_patient_ids)
+            contact_response = cq.limit(remaining).execute()
             
             if contact_response.data:
                 # Avoid duplicates

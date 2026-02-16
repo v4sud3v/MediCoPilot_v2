@@ -248,11 +248,15 @@ class EncounterService {
   Future<List<PatientSearchResult>> searchPatients({
     required String query,
     int limit = 10,
+    String? doctorId,
   }) async {
     try {
-      final url = Uri.parse(
-        '$baseUrl/search/patients?query=${Uri.encodeComponent(query)}&limit=$limit',
-      );
+      var urlStr =
+          '$baseUrl/search/patients?query=${Uri.encodeComponent(query)}&limit=$limit';
+      if (doctorId != null && doctorId.isNotEmpty) {
+        urlStr += '&doctor_id=${Uri.encodeComponent(doctorId)}';
+      }
+      final url = Uri.parse(urlStr);
 
       final response = await http
           .get(
@@ -436,6 +440,38 @@ class EncounterService {
         throw Exception(
           'Failed to update allergies: ${response.statusCode} - ${response.body}',
         );
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAllEncounters({
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    try {
+      final url = Uri.parse(
+        '$baseUrl/encounters/all?limit=$limit&offset=$offset',
+      );
+
+      final response = await http
+          .get(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonData = jsonDecode(response.body);
+        return jsonData
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+      } else {
+        throw Exception('Failed to fetch encounters: ${response.statusCode}');
       }
     } catch (e) {
       rethrow;

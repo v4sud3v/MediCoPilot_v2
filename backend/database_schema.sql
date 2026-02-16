@@ -15,7 +15,6 @@ CREATE TABLE public.doctors (
 -- Patients Table
 CREATE TABLE public.patients (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
-  doctor_id uuid,
   name text NOT NULL,
   email text,
   age integer,
@@ -23,8 +22,20 @@ CREATE TABLE public.patients (
   allergies text,
   contact_info text,
   created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT patients_pkey PRIMARY KEY (id),
-  CONSTRAINT patients_doctor_id_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id)
+  CONSTRAINT patients_pkey PRIMARY KEY (id)
+);
+
+-- Doctor-Patient relationship (many-to-many)
+-- A patient can consult multiple doctors; a doctor can have many patients.
+CREATE TABLE public.doctor_patients (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  doctor_id uuid NOT NULL,
+  patient_id uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT doctor_patients_pkey PRIMARY KEY (id),
+  CONSTRAINT doctor_patients_doctor_id_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id),
+  CONSTRAINT doctor_patients_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id),
+  CONSTRAINT doctor_patients_unique UNIQUE (doctor_id, patient_id)
 );
 
 -- Encounters Table

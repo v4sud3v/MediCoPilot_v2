@@ -216,6 +216,21 @@ async def save_encounter(request: SaveEncounterRequest) -> SaveEncounterResponse
         patient_id = request.patient_id
         patient_allergies = patient_result.data[0].get('allergies', '')
         
+        # Ensure doctor-patient link exists in doctor_patients (many-to-many)
+        try:
+            existing_link = supabase.table('doctor_patients').select('id').eq(
+                'doctor_id', request.doctor_id
+            ).eq('patient_id', patient_id).maybe_single().execute()
+            
+            if not existing_link.data:
+                supabase.table('doctor_patients').insert({
+                    'doctor_id': request.doctor_id,
+                    'patient_id': patient_id,
+                }).execute()
+        except Exception as e:
+            # Don't block encounter save if link insert fails (e.g. already exists)
+            print(f"Note: doctor_patients link check: {e}")
+        
         # Step 2: Determine case_id and visit_number based on mode
         case_id = None
         visit_number = 1
