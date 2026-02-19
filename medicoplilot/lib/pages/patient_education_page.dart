@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../widgets/medicine_card_widget.dart';
 
 class PatientEducationPage extends StatefulWidget {
   const PatientEducationPage({super.key});
@@ -621,73 +622,166 @@ class _PatientEducationPageState extends State<PatientEducationPage>
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF7C3AED).withAlpha(25),
-                borderRadius: BorderRadius.circular(8),
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 800, maxHeight: 700),
+          child: Column(
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF7C3AED),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    topRight: Radius.circular(12),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.description_outlined,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            education['title'] ?? 'Education Material',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Patient Education & Medication Information',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white.withAlpha(200),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: const Icon(
-                Icons.description_outlined,
-                color: Color(0xFF7C3AED),
-                size: 20,
+              // Content
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Patient Education',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey.shade800,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: MarkdownBody(
+                          data: education['content'] ?? '',
+                          styleSheet: MarkdownStyleSheet(
+                            p: const TextStyle(fontSize: 13, height: 1.6),
+                            h1: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            h2: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      // Medicine Card
+                      MedicineCardWidget(
+                        encounterId: education['encounter_id'],
+                        patientName:
+                            education['patient']?.split(' - ')[0] ?? 'Patient',
+                        doctorName: 'Your Doctor',
+                        patientEmail: null,
+                        onSuccess: () {
+                          // Success callback
+                        },
+                        onError: (error) {
+                          // Error callback
+                        },
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                education['title'] ?? 'Education Material',
-                overflow: TextOverflow.ellipsis,
+              // Footer/Actions
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(12),
+                    bottomRight: Radius.circular(12),
+                  ),
+                  border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Close'),
+                    ),
+                    const SizedBox(width: 8),
+                    if (isPending) ...[
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showEditDialog(context, education);
+                        },
+                        icon: const Icon(Icons.edit, size: 18),
+                        label: const Text('Edit'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF7C3AED),
+                          side: const BorderSide(color: Color(0xFF7C3AED)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showSendDialog(context, education);
+                        },
+                        icon: const Icon(Icons.send, size: 18),
+                        label: const Text('Send to Patient'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF16A34A),
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
-        content: SizedBox(
-          width: 600,
-          child: SingleChildScrollView(
-            child: MarkdownBody(
-              data: education['content'] ?? '',
-              styleSheet: MarkdownStyleSheet(
-                p: const TextStyle(fontSize: 13, height: 1.6),
-              ),
-            ),
+            ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          if (isPending)
-            OutlinedButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                _showEditDialog(context, education);
-              },
-              icon: const Icon(Icons.edit, size: 18),
-              label: const Text('Edit'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF7C3AED),
-                side: const BorderSide(color: Color(0xFF7C3AED)),
-              ),
-            ),
-          if (isPending)
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                _showSendDialog(context, education);
-              },
-              icon: const Icon(Icons.send, size: 18),
-              label: const Text('Send to Patient'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF16A34A),
-                foregroundColor: Colors.white,
-              ),
-            ),
-        ],
       ),
     );
   }

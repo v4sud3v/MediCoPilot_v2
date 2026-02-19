@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from supabase import create_client, Client
 from datamodel import SaveEncounterRequest, SaveEncounterResponse
 from openai import OpenAI
+from medicine_pdf_generator import parse_medications_string
 import os
 from dotenv import load_dotenv
 import uuid
@@ -29,38 +30,40 @@ if GROQ_API_KEY:
 def generate_patient_education(encounter_data: dict, patient_data: dict) -> dict:
     """
     Generate patient education content using AI based on the encounter.
+    Separates general education from medicine information.
     """
     if not ai_client:
         return None
     
+    # Parse medications to extract structured medicine info
+    medications_str = encounter_data.get('medications', '')
+    medicines_list = parse_medications_string(medications_str) if medications_str else []
+    
     prompt = f"""You are a medical educator. Create a patient education document based on this encounter:
-
-Patient Name: {patient_data.get('name', 'Patient')}
-Age: {patient_data.get('age', 'N/A')}
-Gender: {patient_data.get('gender', 'N/A')}
-Allergies: {patient_data.get('allergies', 'None reported')}
 
 Chief Complaint: {encounter_data.get('chief_complaint', 'N/A')}
 Diagnosis: {encounter_data.get('diagnosis', 'N/A')}
-Medications Prescribed: {encounter_data.get('medications', 'None')}
 Physical Exam Findings: {encounter_data.get('physical_exam', 'N/A')}
 
 Generate a patient-friendly education document that includes:
 1. An explanation of their condition in simple terms
-2. What each prescribed medication is for and how to take it
-3. Important care instructions and lifestyle recommendations
-4. Warning signs that require immediate medical attention
-5. Expected recovery timeline and follow-up recommendations
+2. Important care instructions and lifestyle recommendations
+3. Warning signs that require immediate medical attention
+4. Expected recovery timeline and follow-up recommendations
+5. When to contact your doctor
+
+Note: Medication information will be provided separately in a dedicated document.
 
 Format the content clearly with sections and bullet points where appropriate.
 Write in a caring, reassuring tone that patients can easily understand.
+Do NOT include specific medication names or dosages in this content.
 """
 
     try:
         response = ai_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": "You are a compassionate medical educator creating patient-friendly educational materials."},
+                {"role": "system", "content": "You are a compassionate medical educator creating patient-friendly educational materials. Focus on condition management and lifestyle, medication details are provided separately."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
@@ -73,11 +76,30 @@ Write in a caring, reassuring tone that patients can easily understand.
         title = f"Understanding Your Diagnosis: {diagnosis[:50]}" if diagnosis else "Your Health Care Guide"
         description = f"Educational material about your recent visit for {encounter_data.get('chief_complaint', 'your condition')}"
         
+        # Convert medicines to format compatible with PatientEducation model
+        medicines_data = []
+        if medicines_list:
+            for medicine in medicines_list:
+                medicines_data.append({
+                    "name": medicine.name,
+                    "dosage": medicine.dosage,
+                    "frequency": medicine.frequency,
+                    "instructions": medicine.instructions,
+                    "indication": medicine.indication,
+                    "side_effects": medicine.side_effects,
+                    "precautions": medicine.precautions,
+                    "duration": medicine.duration
+                })
+        
         return {
             "title": title,
             "description": description,
-            "content": content
+            "content": content,
+            "medicines": medicines_data if medicines_data else None
         }
+    except Exception as e:
+        print(f"Error generating patient education: {e}")
+        return None
     except Exception as e:
         print(f"Error generating patient education: {e}")
         return None

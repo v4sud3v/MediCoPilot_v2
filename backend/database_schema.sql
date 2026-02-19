@@ -99,6 +99,8 @@ CREATE TABLE public.patient_education (
   title text NOT NULL,
   description text,
   content text NOT NULL,
+  medicines jsonb,
+  medicines_pdf_id uuid,
   status text DEFAULT 'pending' CHECK (status = ANY (ARRAY['pending'::text, 'sent'::text, 'viewed'::text])),
   sent_at timestamp with time zone,
   viewed_at timestamp with time zone,
@@ -107,6 +109,21 @@ CREATE TABLE public.patient_education (
   CONSTRAINT patient_education_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES public.encounters(id),
   CONSTRAINT patient_education_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id),
   CONSTRAINT patient_education_doctor_id_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id)
+);
+
+-- Medicine PDFs Table (Store generated medicine PDFs for sharing)
+CREATE TABLE public.medicine_pdfs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  encounter_id uuid NOT NULL,
+  patient_id uuid NOT NULL,
+  doctor_id uuid NOT NULL,
+  pdf_data bytea NOT NULL,
+  filename text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT medicine_pdfs_pkey PRIMARY KEY (id),
+  CONSTRAINT medicine_pdfs_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES public.encounters(id),
+  CONSTRAINT medicine_pdfs_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id),
+  CONSTRAINT medicine_pdfs_doctor_id_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id)
 );
 
 -- Patient Summary Table (AI-generated summary of important encounter details)

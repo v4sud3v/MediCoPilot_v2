@@ -211,6 +211,65 @@ class ApiService {
     );
   }
 
+  // Medicine/Medication endpoints
+  Future<dynamic> generateMedicinePdf({
+    required String encounterId,
+    String patientName = 'Patient',
+    String doctorName = 'Your Doctor',
+  }) async {
+    final body = {
+      'encounter_id': encounterId,
+      'patient_name': patientName,
+      'doctor_name': doctorName,
+    };
+
+    return post('/medicines/generate-pdf', body, requiresAuth: false);
+  }
+
+  Future<List<int>> downloadMedicinePdf({
+    required String encounterId,
+    String patientName = 'Patient',
+    String doctorName = 'Your Doctor',
+  }) async {
+    try {
+      final url = Uri.parse(
+        '${ApiConfig.baseUrl}/medicines/encounter/$encounterId/pdf?patient_name=$patientName&doctor_name=$doctorName',
+      );
+      final response = await http.get(url).timeout(ApiConfig.timeout);
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return response.bodyBytes;
+      } else {
+        throw ApiException(
+          'Failed to download medicine PDF',
+          statusCode: response.statusCode,
+        );
+      }
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<dynamic> sendMedicinePdfEmail({
+    required String encounterId,
+    required String patientEmail,
+    String patientName = 'Patient',
+    String doctorName = 'Your Doctor',
+  }) async {
+    final body = {
+      'encounter_id': encounterId,
+      'patient_email': patientEmail,
+      'patient_name': patientName,
+      'doctor_name': doctorName,
+    };
+
+    return post(
+      '/medicines/encounter/$encounterId/send-pdf',
+      body,
+      requiresAuth: false,
+    );
+  }
+
   // Patient Summary endpoints
   Future<dynamic> getPatientSummariesForDoctor(
     String doctorId, {

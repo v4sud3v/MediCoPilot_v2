@@ -9,3 +9,5 @@ pydantic[email]
 httpx
 google-genai
 openai
+reportlab
+python-dateutil
