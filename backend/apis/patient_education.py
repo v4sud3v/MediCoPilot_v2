@@ -326,7 +326,9 @@ async def send_education(education_id: str):
 
         # Build email
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"MediCoPilot - {edu['title']}"
+        # Sanitize title: remove newlines/tabs that break email headers
+        safe_title = ' '.join(edu['title'].replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').split())
+        msg["Subject"] = f"MediCoPilot - {safe_title}"
         msg["From"] = smtp_email
         msg["To"] = patient_email
 

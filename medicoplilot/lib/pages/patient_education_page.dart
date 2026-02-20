@@ -36,6 +36,7 @@ class _PatientEducationPageState extends State<PatientEducationPage>
   }
 
   Future<void> _loadEducationData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -44,6 +45,7 @@ class _PatientEducationPageState extends State<PatientEducationPage>
     try {
       final doctorId = _authService.currentUser?.id;
       if (doctorId == null) {
+        if (!mounted) return;
         setState(() {
           _errorMessage = 'Please log in to view education materials';
           _isLoading = false;
@@ -63,12 +65,14 @@ class _PatientEducationPageState extends State<PatientEducationPage>
         status: 'sent',
       );
 
+      if (!mounted) return;
       setState(() {
         _pendingEducation = _parseEducationList(pendingResponse);
         _sentEducation = _parseEducationList(sentResponse);
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'Failed to load education materials: ${e.toString()}';
         _isLoading = false;

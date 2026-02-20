@@ -1,5 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../utils/medicine_pdf_saver.dart';
 
 class MedicineCardWidget extends StatelessWidget {
   final String encounterId;
@@ -35,9 +38,8 @@ class MedicineCardWidget extends StatelessWidget {
         doctorName: doctorName,
       );
 
-      // TODO: Implement file saving based on platform
-      // For web, you would use the universal_html package to download
-      // For mobile, you would use path_provider and share
+      final fileName = 'medicine_${encounterId}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      await saveMedicinePdf(Uint8List.fromList(pdfBytes), fileName);
       onSuccess();
 
       if (context.mounted) {

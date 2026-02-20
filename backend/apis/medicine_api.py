@@ -1,9 +1,10 @@
+import os
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from supabase import create_client, Client
 from datamodel import MedicinePDFResponse, GenerateMedicinePDFRequest
 from medicine_pdf_generator import generate_medicine_pdf_from_string
-import os
+from config import settings
 import uuid
 from datetime import datetime
 import base64
@@ -13,8 +14,8 @@ router = APIRouter(prefix="/medicines", tags=["Medicines"])
 
 # Initialize Supabase client
 supabase: Client = create_client(
-    os.getenv("SUPABASE_URL"),
-    os.getenv("SUPABASE_SECRET_KEY")
+    settings.SUPABASE_URL,
+    settings.SUPABASE_SECRET_KEY
 )
 
 
@@ -133,10 +134,11 @@ async def download_medicine_pdf(
         filename = f"medicines_{encounter_id[:8]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         
         # Return as file download
-        return FileResponse(
-            BytesIO(pdf_bytes),
+        pdf_stream = BytesIO(pdf_bytes)
+        pdf_stream.seek(0)
+        return StreamingResponse(
+            pdf_stream,
             media_type="application/pdf",
-            filename=filename,
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
     
