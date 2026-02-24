@@ -13,9 +13,12 @@ import re
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 from typing import Optional
 from datetime import datetime
 import uuid
+from medicine_pdf_generator import generate_medicine_pdf_from_string
 
 
 def markdown_to_html(text: str) -> str:
@@ -324,13 +327,15 @@ async def send_education(education_id: str):
         if not smtp_email or not smtp_password:
             raise HTTPException(status_code=500, detail="SMTP email credentials not configured")
 
-        # Build email
-        msg = MIMEMultipart("alternative")
+        # Build email (multipart/mixed root + multipart/alternative body)
+        msg = MIMEMultipart("mixed")
         # Sanitize title: remove newlines/tabs that break email headers
         safe_title = ' '.join(edu['title'].replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').split())
         msg["Subject"] = f"MediCoPilot - {safe_title}"
         msg["From"] = smtp_email
         msg["To"] = patient_email
+
+        body_part = MIMEMultipart("alternative")
 
         # Plain text version
         plain_text = f"""Dear {patient_name},
@@ -370,8 +375,40 @@ This email was sent via MediCoPilot. Please consult your doctor for any question
 </html>
 """
 
-        msg.attach(MIMEText(plain_text, "plain"))
-        msg.attach(MIMEText(html_content, "html"))
+        body_part.attach(MIMEText(plain_text, "plain"))
+        body_part.attach(MIMEText(html_content, "html"))
+        msg.attach(body_part)
+
+        # Attach medicine PDF when medications are available for the encounter
+        encounter_response = supabase.table('encounters').select(
+            'id, medications'
+        ).eq('id', edu['encounter_id']).single().execute()
+
+        if encounter_response.data:
+            medications_str = encounter_response.data.get('medications', '')
+            if medications_str and medications_str.strip():
+                doctor_name = "Your Doctor"
+                try:
+                    doctor_response = supabase.table('doctors').select('name').eq(
+                        'id', edu['doctor_id']
+                    ).single().execute()
+                    if doctor_response.data and doctor_response.data.get('name'):
+                        doctor_name = doctor_response.data['name']
+                except Exception as doctor_error:
+                    print(f"Could not fetch doctor name for PDF: {doctor_error}")
+
+                pdf_bytes = generate_medicine_pdf_from_string(
+                    medications_str,
+                    patient_name=patient_name,
+                    doctor_name=doctor_name
+                )
+
+                attachment = MIMEBase("application", "pdf")
+                attachment.set_payload(pdf_bytes)
+                encoders.encode_base64(attachment)
+                filename = f"medicines_{edu['encounter_id'][:8]}.pdf"
+                attachment.add_header("Content-Disposition", f"attachment; filename={filename}")
+                msg.attach(attachment)
 
         # Send via Gmail SMTP
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:

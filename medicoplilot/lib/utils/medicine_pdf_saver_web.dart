@@ -1,15 +1,18 @@
+import 'dart:js_interop';
 import 'dart:typed_data';
-import 'dart:html' as html;
+import 'package:web/web.dart' as web;
 
 Future<void> saveMedicinePdf(Uint8List pdfBytes, String fileName) async {
-  final blob = html.Blob(<dynamic>[pdfBytes], 'application/pdf');
-  final url = html.Url.createObjectUrlFromBlob(blob);
-  final anchor = html.AnchorElement(href: url)
+  final jsArray = <JSAny>[pdfBytes.toJS].toJS;
+  final blob = web.Blob(jsArray, web.BlobPropertyBag(type: 'application/pdf'));
+  final url = web.URL.createObjectURL(blob);
+  final anchor = web.document.createElement('a') as web.HTMLAnchorElement
+    ..href = url
     ..download = fileName
     ..style.display = 'none';
 
-  html.document.body?.append(anchor);
+  web.document.body?.append(anchor);
   anchor.click();
   anchor.remove();
-  html.Url.revokeObjectUrl(url);
+  web.URL.revokeObjectURL(url);
 }

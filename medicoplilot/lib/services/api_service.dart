@@ -154,8 +154,7 @@ class ApiService {
       'diagnosis': diagnosis,
       'symptoms': symptoms,
       'vital_signs': vitalSigns,
-      if (examinationFindings != null)
-        'examination_findings': examinationFindings,
+      'examination_findings': ?examinationFindings,
     };
 
     return post('/analysis/encounter', body, requiresAuth: false);
@@ -310,7 +309,7 @@ class ApiService {
       'image_base64': imageBase64,
       'image_type': imageType,
       'body_region': bodyRegion,
-      if (patientContext != null) 'patient_context': patientContext,
+      'patient_context': ?patientContext,
     };
 
     return post('/analysis/xray', body, requiresAuth: false);
@@ -365,7 +364,7 @@ class ApiService {
       'encounter_id': encounterId,
       'file_url': fileUrl,
       'document_type': documentType,
-      if (extractedText != null) 'extracted_text': extractedText,
+      'extracted_text': ?extractedText,
     };
 
     return post('/documents/upload', body, requiresAuth: false);

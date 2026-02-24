@@ -1074,7 +1074,6 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
-    
 
     if (widget.selectedPatientId == null || widget.selectedPatientId!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1173,8 +1172,6 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
         // Navigator.of(context).pop();
       }
     } catch (e) {
-      print('Error saving encounter: $e');
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1249,8 +1246,6 @@ class _NewEncounterPageState extends State<NewEncounterPage> {
         );
       }
     } catch (e) {
-      print('Error analyzing diagnosis: $e');
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
