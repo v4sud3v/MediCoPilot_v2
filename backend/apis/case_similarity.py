@@ -1,26 +1,36 @@
 """
 Case-Based Similarity API
 
-Uses BERT (bert-base-uncased) to embed encounter text locally — no external
-API calls.  Embeddings are stored in the Supabase `case_embeddings` table and
-cosine similarity is computed in-process with scikit-learn.
+Uses NLTK for text preprocessing (tokenization, stopword removal, stemming)
+and scikit-learn TF-IDF vectorization + cosine similarity.
+No BERT, no torch, no heavy model downloads.
+
+Pipeline:
+  1. build_case_text()  — extract clinical fields into one string
+  2. preprocess()       — NLTK tokenize → lowercase → remove stopwords → Porter stem
+  3. TfidfVectorizer    — fit on all stored case texts + query at search time
+  4. cosine_similarity  — rank and return top-K
 
 Endpoints:
-  POST /case-similarity/embed/{encounter_id}     – embed one encounter
-  POST /case-similarity/embed-all/{doctor_id}     – batch embed all encounters for a doctor
-  GET  /case-similarity/similar/{encounter_id}    – find similar past cases
-  POST /case-similarity/search                    – search by free-text query
+  POST /case-similarity/index/{encounter_id}      – index one encounter
+  POST /case-similarity/index-all/{doctor_id}      – batch index all encounters for a doctor
+  GET  /case-similarity/similar/{encounter_id}     – find similar past cases
+  POST /case-similarity/search                     – search by free-text query
 """
 
-import json
 import os
+import re
 import uuid
 from typing import List, Optional
 
-import numpy as np
-import torch
-from transformers import AutoTokenizer, AutoModel
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from nltk.stem import PorterStemmer
+
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+
 from fastapi import APIRouter, HTTPException, Query
 from supabase import create_client, Client
 from datamodel import (
@@ -29,6 +39,15 @@ from datamodel import (
     EmbedEncounterResponse,
     FreeTextSearchRequest,
 )
+
+# ---------------------------------------------------------------------------
+# NLTK setup (download data files once)
+# ---------------------------------------------------------------------------
+for _pkg in ("punkt", "punkt_tab", "stopwords"):
+    nltk.download(_pkg, quiet=True)
+
+_stemmer = PorterStemmer()
+_stop_words = set(stopwords.words("english"))
 
 router = APIRouter(prefix="/case-similarity", tags=["Case Similarity"])
 
@@ -40,32 +59,12 @@ supabase: Client = create_client(
 
 
 # ---------------------------------------------------------------------------
-# BERT model loading (lazy singleton so import is cheap)
-# ---------------------------------------------------------------------------
-_tokenizer = None
-_model = None
-
-
-def _load_model():
-    """Load BERT model and tokenizer once. Uses bert-base-uncased (768-dim)."""
-    global _tokenizer, _model
-    if _tokenizer is None or _model is None:
-        model_name = "bert-base-uncased"
-        print(f"[CaseSimilarity] Loading BERT model: {model_name} ...")
-        _tokenizer = AutoTokenizer.from_pretrained(model_name)
-        _model = AutoModel.from_pretrained(model_name)
-        _model.eval()  # inference mode
-        print("[CaseSimilarity] BERT model loaded.")
-    return _tokenizer, _model
-
-
-# ---------------------------------------------------------------------------
 # Text helpers
 # ---------------------------------------------------------------------------
 
 def build_case_text(encounter: dict) -> str:
     """
-    Build a single text string from encounter fields for embedding.
+    Build a single text string from encounter fields.
     Only includes non-empty fields.
     """
     fields = [
@@ -80,129 +79,83 @@ def build_case_text(encounter: dict) -> str:
     return " | ".join(parts) if parts else ""
 
 
-# ---------------------------------------------------------------------------
-# Embedding
-# ---------------------------------------------------------------------------
-
-def embed_text(text: str) -> np.ndarray:
+def preprocess(text: str) -> str:
     """
-    Produce a 768-dim embedding for *text* using BERT mean-pooling.
-
-    Steps:
-      1. Tokenize (truncate at 512 tokens).
-      2. Forward pass through BERT -> last_hidden_state.
-      3. Mean-pool across non-padding tokens.
-      4. L2-normalize for cosine similarity.
-
-    Returns a 1-D numpy array of shape (768,).
+    NLTK preprocessing pipeline:
+      1. Lowercase
+      2. Remove non-alphabetic characters (keep spaces)
+      3. Tokenize with word_tokenize
+      4. Remove English stopwords
+      5. Apply Porter stemming
+    Returns a single cleaned string ready for TF-IDF.
     """
-    tokenizer, model = _load_model()
-
-    encoded = tokenizer(
-        text,
-        padding=True,
-        truncation=True,
-        max_length=512,
-        return_tensors="pt",
-    )
-
-    with torch.no_grad():
-        outputs = model(**encoded)
-
-    attention_mask = encoded["attention_mask"]
-    token_embeddings = outputs.last_hidden_state
-    mask_expanded = attention_mask.unsqueeze(-1).float()
-    sum_embeddings = (token_embeddings * mask_expanded).sum(dim=1)
-    sum_mask = mask_expanded.sum(dim=1).clamp(min=1e-9)
-    mean_pooled = sum_embeddings / sum_mask
-
-    vec = mean_pooled.squeeze(0).numpy()
-    norm = np.linalg.norm(vec)
-    if norm > 0:
-        vec = vec / norm
-    return vec
-
-
-def embed_text_batch(texts: List[str], batch_size: int = 16) -> np.ndarray:
-    """
-    Embed multiple texts efficiently in batches.
-    Returns shape (N, 768).
-    """
-    tokenizer, model = _load_model()
-    all_vecs = []
-
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i : i + batch_size]
-        encoded = tokenizer(
-            batch,
-            padding=True,
-            truncation=True,
-            max_length=512,
-            return_tensors="pt",
-        )
-        with torch.no_grad():
-            outputs = model(**encoded)
-
-        attention_mask = encoded["attention_mask"]
-        token_embeddings = outputs.last_hidden_state
-        mask_expanded = attention_mask.unsqueeze(-1).float()
-        sum_embeddings = (token_embeddings * mask_expanded).sum(dim=1)
-        sum_mask = mask_expanded.sum(dim=1).clamp(min=1e-9)
-        mean_pooled = sum_embeddings / sum_mask
-
-        vecs = mean_pooled.numpy()
-        norms = np.linalg.norm(vecs, axis=1, keepdims=True)
-        norms = np.where(norms > 0, norms, 1e-9)
-        vecs = vecs / norms
-        all_vecs.append(vecs)
-
-    return np.vstack(all_vecs)
+    text = text.lower()
+    text = re.sub(r"[^a-z\s]", " ", text)
+    tokens = word_tokenize(text)
+    tokens = [_stemmer.stem(t) for t in tokens if t not in _stop_words and len(t) > 1]
+    return " ".join(tokens)
 
 
 # ---------------------------------------------------------------------------
-# Similarity search (in-memory cosine similarity)
+# TF-IDF similarity (computed at query time — no stored vectors needed)
 # ---------------------------------------------------------------------------
 
-def find_similar(
-    query_vec: np.ndarray,
-    stored_embeddings: List[dict],
+def compute_similarity(
+    query_text: str,
+    case_rows: List[dict],
     top_k: int = 5,
     exclude_encounter_id: Optional[str] = None,
 ) -> List[dict]:
     """
-    Return top_k most similar cases from *stored_embeddings*.
-    Each dict must have an "embedding" key (JSON string or list of floats).
+    1. Preprocess query + all stored case_summary texts
+    2. Fit TfidfVectorizer on the combined corpus
+    3. Compute cosine similarity between query vector and each case vector
+    4. Return top_k results sorted by score descending
+
+    Parameters
+    ----------
+    query_text : raw clinical text (not yet preprocessed)
+    case_rows  : list of dicts from case_embeddings table
+    top_k      : number of results to return
+    exclude_encounter_id : skip this encounter (self-match)
     """
-    if not stored_embeddings:
+    if not case_rows:
         return []
 
-    matrix_rows = []
-    meta = []
-
-    for row in stored_embeddings:
-        eid = row.get("encounter_id")
-        if exclude_encounter_id and eid == exclude_encounter_id:
+    # Filter out the query encounter itself
+    filtered = []
+    for row in case_rows:
+        if exclude_encounter_id and row.get("encounter_id") == exclude_encounter_id:
             continue
-        emb = row.get("embedding")
-        if isinstance(emb, str):
-            emb = json.loads(emb)
-        if emb is None:
-            continue
-        matrix_rows.append(emb)
-        meta.append(row)
+        summary = row.get("case_summary", "")
+        if summary:
+            filtered.append(row)
 
-    if not matrix_rows:
+    if not filtered:
         return []
 
-    matrix = np.array(matrix_rows, dtype=np.float32)
-    sims = cosine_similarity(query_vec.reshape(1, -1), matrix)[0]
+    # Preprocess all texts: query first, then each case
+    query_clean = preprocess(query_text)
+    corpus = [query_clean] + [preprocess(r["case_summary"]) for r in filtered]
 
+    # TF-IDF vectorization with unigrams + bigrams
+    vectorizer = TfidfVectorizer(ngram_range=(1, 2), max_features=5000)
+    tfidf_matrix = vectorizer.fit_transform(corpus)  # sparse matrix (N+1, features)
+
+    query_vec = tfidf_matrix[0:1]   # first row = query
+    case_vecs = tfidf_matrix[1:]    # remaining rows = cases
+
+    # Cosine similarity
+    sims = cosine_similarity(query_vec, case_vecs)[0]  # shape (N,)
+
+    # Top-K indices
     top_idx = sims.argsort()[::-1][:top_k]
 
     results = []
     for idx in top_idx:
-        entry = {**meta[idx]}
+        entry = {**filtered[idx]}
         entry["similarity_score"] = round(float(sims[idx]), 4)
+        # Don't send the raw embedding/summary blob back
         entry.pop("embedding", None)
         results.append(entry)
 
@@ -213,13 +166,14 @@ def find_similar(
 # Supabase helpers
 # ---------------------------------------------------------------------------
 
-def store_embedding(encounter_id: str, doctor_id: str,
-                    patient_id: str, case_summary: str, embedding: np.ndarray,
-                    diagnosis: str = "", chief_complaint: str = "",
-                    treatments: str = ""):
-    """Insert or upsert an embedding row into the case_embeddings table."""
-    vec_list = embedding.tolist()
-
+def store_case_index(encounter_id: str, doctor_id: str, patient_id: str,
+                     case_summary: str, diagnosis: str = "",
+                     chief_complaint: str = "", treatments: str = ""):
+    """
+    Insert or update a row in case_embeddings.
+    We store the case_summary text (no vector needed — TF-IDF is computed
+    at query time).  The embedding column is left empty.
+    """
     existing = supabase.table("case_embeddings").select("id").eq(
         "encounter_id", encounter_id
     ).execute()
@@ -229,7 +183,7 @@ def store_embedding(encounter_id: str, doctor_id: str,
         "doctor_id": doctor_id,
         "patient_id": patient_id,
         "case_summary": case_summary,
-        "embedding": json.dumps(vec_list),
+        "embedding": "",
         "diagnosis": diagnosis or "",
         "chief_complaint": chief_complaint or "",
         "treatments": treatments or "",
@@ -243,10 +197,10 @@ def store_embedding(encounter_id: str, doctor_id: str,
         supabase.table("case_embeddings").insert(row).execute()
 
 
-def fetch_all_embeddings(doctor_id: Optional[str] = None) -> List[dict]:
-    """Fetch stored embeddings, optionally filtered by doctor_id."""
+def fetch_all_cases(doctor_id: Optional[str] = None) -> List[dict]:
+    """Fetch all indexed cases, optionally filtered by doctor."""
     query = supabase.table("case_embeddings").select(
-        "encounter_id, doctor_id, patient_id, case_summary, embedding, "
+        "encounter_id, doctor_id, patient_id, case_summary, "
         "diagnosis, chief_complaint, treatments, created_at"
     )
     if doctor_id:
@@ -254,10 +208,10 @@ def fetch_all_embeddings(doctor_id: Optional[str] = None) -> List[dict]:
     return query.execute().data or []
 
 
-def fetch_all_embeddings_all_doctors() -> List[dict]:
-    """Fetch embeddings from ALL doctors for cross-doctor similarity."""
+def fetch_all_cases_all_doctors() -> List[dict]:
+    """Fetch indexed cases from ALL doctors."""
     return supabase.table("case_embeddings").select(
-        "encounter_id, doctor_id, patient_id, case_summary, embedding, "
+        "encounter_id, doctor_id, patient_id, case_summary, "
         "diagnosis, chief_complaint, treatments, created_at"
     ).execute().data or []
 
@@ -268,7 +222,9 @@ def fetch_all_embeddings_all_doctors() -> List[dict]:
 
 def _fetch_encounter(encounter_id: str) -> dict:
     """Fetch a single encounter row from Supabase."""
-    resp = supabase.table("encounters").select("*").eq("id", encounter_id).maybe_single().execute()
+    resp = supabase.table("encounters").select("*").eq(
+        "id", encounter_id
+    ).maybe_single().execute()
     if not resp.data:
         raise HTTPException(status_code=404, detail=f"Encounter {encounter_id} not found")
     return resp.data
@@ -277,11 +233,11 @@ def _fetch_encounter(encounter_id: str) -> dict:
 # ------------------------------------------------------------------ routes
 
 
-@router.post("/embed/{encounter_id}", response_model=EmbedEncounterResponse)
-async def embed_encounter(encounter_id: str):
+@router.post("/index/{encounter_id}", response_model=EmbedEncounterResponse)
+async def index_encounter(encounter_id: str):
     """
-    Generate a BERT embedding for a single encounter and store it.
-    Call this after saving / updating an encounter.
+    Index a single encounter for similarity search.
+    Extracts text, preprocesses it, and stores the summary in case_embeddings.
     """
     try:
         uuid.UUID(encounter_id)
@@ -291,32 +247,34 @@ async def embed_encounter(encounter_id: str):
     encounter = _fetch_encounter(encounter_id)
     case_text = build_case_text(encounter)
     if not case_text:
-        raise HTTPException(status_code=400, detail="Encounter has no text fields to embed")
+        raise HTTPException(status_code=400, detail="Encounter has no text fields to index")
 
-    vec = embed_text(case_text)
-    store_embedding(
+    store_case_index(
         encounter_id=encounter_id,
         doctor_id=encounter.get("doctor_id", ""),
         patient_id=encounter.get("patient_id", ""),
         case_summary=case_text,
-        embedding=vec,
         diagnosis=encounter.get("diagnosis", ""),
         chief_complaint=encounter.get("chief_complaint", ""),
         treatments=encounter.get("medications", ""),
     )
 
+    # Return the preprocessed token count so caller knows what was indexed
+    cleaned = preprocess(case_text)
+    token_count = len(cleaned.split())
+
     return EmbedEncounterResponse(
         success=True,
         encounter_id=encounter_id,
-        message="Encounter embedded successfully",
-        embedding_dim=len(vec),
+        message=f"Encounter indexed successfully ({token_count} stemmed tokens)",
+        embedding_dim=token_count,
     )
 
 
-@router.post("/embed-all/{doctor_id}", response_model=dict)
-async def embed_all_encounters(doctor_id: str):
+@router.post("/index-all/{doctor_id}", response_model=dict)
+async def index_all_encounters(doctor_id: str):
     """
-    Batch-embed ALL encounters for a given doctor.
+    Batch-index ALL encounters for a given doctor.
     Useful for initial backfill.
     """
     try:
@@ -324,43 +282,31 @@ async def embed_all_encounters(doctor_id: str):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid doctor ID format")
 
-    # Fetch all encounters for this doctor
     resp = supabase.table("encounters").select("*").eq("doctor_id", doctor_id).execute()
     encounters = resp.data or []
     if not encounters:
-        return {"success": True, "embedded": 0, "message": "No encounters found for this doctor"}
+        return {"success": True, "indexed": 0, "message": "No encounters found for this doctor"}
 
-    texts = []
-    valid_encounters = []
+    count = 0
     for enc in encounters:
-        t = build_case_text(enc)
-        if t:
-            texts.append(t)
-            valid_encounters.append(enc)
-
-    if not texts:
-        return {"success": True, "embedded": 0, "message": "No encounters with text to embed"}
-
-    # Batch embed
-    vecs = embed_text_batch(texts, batch_size=16)
-
-    # Store each
-    for enc, vec, text in zip(valid_encounters, vecs, texts):
-        store_embedding(
+        text = build_case_text(enc)
+        if not text:
+            continue
+        store_case_index(
             encounter_id=enc["id"],
             doctor_id=enc.get("doctor_id", ""),
             patient_id=enc.get("patient_id", ""),
             case_summary=text,
-            embedding=vec,
             diagnosis=enc.get("diagnosis", ""),
             chief_complaint=enc.get("chief_complaint", ""),
             treatments=enc.get("medications", ""),
         )
+        count += 1
 
     return {
         "success": True,
-        "embedded": len(valid_encounters),
-        "message": f"Embedded {len(valid_encounters)} encounters for doctor {doctor_id}",
+        "indexed": count,
+        "message": f"Indexed {count} encounters for doctor {doctor_id}",
     }
 
 
@@ -373,8 +319,13 @@ async def get_similar_cases(
     """
     Find the top-K most similar past cases for a given encounter.
 
-    Returns similar cases with their treatments, diagnosis, and similarity score
-    so the clinician can compare treatment approaches and outcomes.
+    Pipeline:
+      1. Build query text from encounter fields
+      2. Fetch all indexed case summaries from Supabase
+      3. Preprocess all texts with NLTK (tokenize → stopwords → stem)
+      4. Fit TF-IDF vectorizer on the corpus
+      5. Compute cosine similarity
+      6. Return top-K with treatments, diagnosis, doctor info
     """
     try:
         uuid.UUID(encounter_id)
@@ -382,17 +333,13 @@ async def get_similar_cases(
         raise HTTPException(status_code=400, detail="Invalid encounter ID format")
 
     encounter = _fetch_encounter(encounter_id)
-
-    # Build query embedding
     case_text = build_case_text(encounter)
     if not case_text:
         raise HTTPException(status_code=400, detail="Encounter has no text fields to compare")
 
-    query_vec = embed_text(case_text)
-
-    # Fetch stored embeddings
-    all_embeddings = fetch_all_embeddings_all_doctors()
-    if not all_embeddings:
+    # Fetch all indexed cases
+    all_cases = fetch_all_cases_all_doctors()
+    if not all_cases:
         return SimilarCasesResponse(
             encounter_id=encounter_id,
             query_summary=case_text,
@@ -403,16 +350,16 @@ async def get_similar_cases(
     # Optionally filter to same doctor
     if same_doctor_only:
         doctor_id = encounter.get("doctor_id")
-        all_embeddings = [e for e in all_embeddings if e.get("doctor_id") == doctor_id]
+        all_cases = [c for c in all_cases if c.get("doctor_id") == doctor_id]
 
-    results = find_similar(
-        query_vec=query_vec,
-        stored_embeddings=all_embeddings,
+    results = compute_similarity(
+        query_text=case_text,
+        case_rows=all_cases,
         top_k=top_k,
         exclude_encounter_id=encounter_id,
     )
 
-    # Enrich results with doctor name
+    # Enrich with doctor name
     for r in results:
         did = r.get("doctor_id")
         if did:
@@ -441,7 +388,7 @@ async def get_similar_cases(
         encounter_id=encounter_id,
         query_summary=case_text,
         similar_cases=similar,
-        total_cases_searched=len(all_embeddings),
+        total_cases_searched=len(all_cases),
     )
 
 
@@ -454,10 +401,8 @@ async def search_by_text(request: FreeTextSearchRequest):
     if not request.query.strip():
         raise HTTPException(status_code=400, detail="Query text is required")
 
-    query_vec = embed_text(request.query)
-
-    all_embeddings = fetch_all_embeddings_all_doctors()
-    if not all_embeddings:
+    all_cases = fetch_all_cases_all_doctors()
+    if not all_cases:
         return SimilarCasesResponse(
             encounter_id="",
             query_summary=request.query,
@@ -465,9 +410,9 @@ async def search_by_text(request: FreeTextSearchRequest):
             total_cases_searched=0,
         )
 
-    results = find_similar(
-        query_vec=query_vec,
-        stored_embeddings=all_embeddings,
+    results = compute_similarity(
+        query_text=request.query,
+        case_rows=all_cases,
         top_k=request.top_k,
     )
 
@@ -499,5 +444,5 @@ async def search_by_text(request: FreeTextSearchRequest):
         encounter_id="",
         query_summary=request.query,
         similar_cases=similar,
-        total_cases_searched=len(all_embeddings),
+        total_cases_searched=len(all_cases),
     )

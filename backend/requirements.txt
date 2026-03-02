@@ -11,7 +11,5 @@ google-genai
 openai
 reportlab
 python-dateutil
-transformers
-torch
-numpy
+nltk
 scikit-learn
