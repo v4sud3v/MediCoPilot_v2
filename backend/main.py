@@ -9,6 +9,7 @@ from apis.encounters import router as encounters_router
 from apis.patient_education import router as patient_education_router
 from apis.documents import router as documents_router
 from apis.medicine_api import router as medicine_router
+from apis.case_similarity import router as case_similarity_router
 
 app = FastAPI(
     title="MediCoPilot API",
@@ -35,6 +36,7 @@ app.include_router(encounters_router)
 app.include_router(patient_education_router)
 app.include_router(documents_router)
 app.include_router(medicine_router)
+app.include_router(case_similarity_router)
 
 
 @app.get("/", tags=["Health"])

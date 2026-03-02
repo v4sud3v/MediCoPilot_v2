@@ -1,7 +1,15 @@
--- MediCoPilot Database Schema
--- Created: 2026-01-21
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
 
--- Doctors Table
+CREATE TABLE public.doctor_patients (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  doctor_id uuid NOT NULL,
+  patient_id uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT doctor_patients_pkey PRIMARY KEY (id),
+  CONSTRAINT doctor_patients_doctor_id_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id),
+  CONSTRAINT doctor_patients_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id)
+);
 CREATE TABLE public.doctors (
   id uuid NOT NULL,
   name text NOT NULL,
@@ -11,60 +19,6 @@ CREATE TABLE public.doctors (
   CONSTRAINT doctors_pkey PRIMARY KEY (id),
   CONSTRAINT doctors_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
 );
-
--- Patients Table
-CREATE TABLE public.patients (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  email text,
-  age integer,
-  gender text,
-  allergies text,
-  contact_info text,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT patients_pkey PRIMARY KEY (id)
-);
-
--- Doctor-Patient relationship (many-to-many)
--- A patient can consult multiple doctors; a doctor can have many patients.
-CREATE TABLE public.doctor_patients (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  doctor_id uuid NOT NULL,
-  patient_id uuid NOT NULL,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT doctor_patients_pkey PRIMARY KEY (id),
-  CONSTRAINT doctor_patients_doctor_id_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id),
-  CONSTRAINT doctor_patients_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id),
-  CONSTRAINT doctor_patients_unique UNIQUE (doctor_id, patient_id)
-);
-
--- Encounters Table
-CREATE TABLE public.encounters (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  patient_id uuid,
-  doctor_id uuid,
-  case_id uuid NOT NULL,
-  visit_number integer NOT NULL,
-  chief_complaint text,
-  history_of_illness text,
-  allergies text,
-  temperature double precision,
-  blood_pressure text,
-  heart_rate integer,
-  respiratory_rate integer,
-  oxygen_saturation integer,
-  weight double precision,
-  height double precision,
-  physical_exam text,
-  diagnosis text,
-  medications text,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT encounters_pkey PRIMARY KEY (id),
-  CONSTRAINT encounters_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id),
-  CONSTRAINT encounters_doctor_id_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id)
-);
-
--- Documents Table
 CREATE TABLE public.documents (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   encounter_id uuid,
@@ -75,8 +29,30 @@ CREATE TABLE public.documents (
   CONSTRAINT documents_pkey PRIMARY KEY (id),
   CONSTRAINT documents_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES public.encounters(id)
 );
-
--- Medications Table
+CREATE TABLE public.encounters (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  patient_id uuid,
+  doctor_id uuid,
+  case_id uuid NOT NULL,
+  visit_number integer NOT NULL,
+  chief_complaint text,
+  history_of_illness text,
+  temperature double precision,
+  blood_pressure text,
+  heart_rate integer,
+  respiratory_rate integer,
+  oxygen_saturation integer,
+  weight double precision,
+  height double precision,
+  physical_exam text,
+  diagnosis text,
+  created_at timestamp with time zone DEFAULT now(),
+  medications text,
+  allergies text,
+  CONSTRAINT encounters_pkey PRIMARY KEY (id),
+  CONSTRAINT encounters_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id),
+  CONSTRAINT encounters_doctor_id_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id)
+);
 CREATE TABLE public.medications (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   encounter_id uuid,
@@ -89,8 +65,6 @@ CREATE TABLE public.medications (
   CONSTRAINT medications_pkey PRIMARY KEY (id),
   CONSTRAINT medications_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES public.encounters(id)
 );
-
--- Patient Education Table (AI-generated educational content for patients)
 CREATE TABLE public.patient_education (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   encounter_id uuid NOT NULL,
@@ -99,9 +73,7 @@ CREATE TABLE public.patient_education (
   title text NOT NULL,
   description text,
   content text NOT NULL,
-  medicines jsonb,
-  medicines_pdf_id uuid,
-  status text DEFAULT 'pending' CHECK (status = ANY (ARRAY['pending'::text, 'sent'::text, 'viewed'::text])),
+  status text DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'sent'::text, 'viewed'::text])),
   sent_at timestamp with time zone,
   viewed_at timestamp with time zone,
   created_at timestamp with time zone DEFAULT now(),
@@ -110,23 +82,6 @@ CREATE TABLE public.patient_education (
   CONSTRAINT patient_education_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id),
   CONSTRAINT patient_education_doctor_id_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id)
 );
-
--- Medicine PDFs Table (Store generated medicine PDFs for sharing)
-CREATE TABLE public.medicine_pdfs (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  encounter_id uuid NOT NULL,
-  patient_id uuid NOT NULL,
-  doctor_id uuid NOT NULL,
-  pdf_data bytea NOT NULL,
-  filename text NOT NULL,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT medicine_pdfs_pkey PRIMARY KEY (id),
-  CONSTRAINT medicine_pdfs_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES public.encounters(id),
-  CONSTRAINT medicine_pdfs_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id),
-  CONSTRAINT medicine_pdfs_doctor_id_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id)
-);
-
--- Patient Summary Table (AI-generated summary of important encounter details)
 CREATE TABLE public.patient_summary (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   encounter_id uuid NOT NULL,
@@ -142,4 +97,29 @@ CREATE TABLE public.patient_summary (
   CONSTRAINT patient_summary_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES public.encounters(id),
   CONSTRAINT patient_summary_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id),
   CONSTRAINT patient_summary_doctor_id_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id)
+);
+CREATE TABLE public.patients (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  age integer,
+  gender text,
+  allergies text,
+  contact_info text,
+  created_at timestamp with time zone DEFAULT now(),
+  email text,
+  CONSTRAINT patients_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.case_embeddings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  encounter_id uuid NOT NULL,
+  doctor_id uuid,
+  patient_id uuid,
+  case_summary text,
+  embedding text,
+  diagnosis text,
+  chief_complaint text,
+  treatments text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT case_embeddings_pkey PRIMARY KEY (id),
+  CONSTRAINT case_embeddings_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES public.encounters(id) ON DELETE CASCADE
 );

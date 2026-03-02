@@ -188,3 +188,36 @@ class XrayAnalysisResponse(BaseModel):
     analyses: List[SpecialistAnalysis]
     primary_specialist: Optional[str] = None
     overall_summary: str
+
+
+# Case-Based Similarity Models
+class SimilarCaseResult(BaseModel):
+    encounter_id: str
+    doctor_id: str = ""
+    doctor_name: str = ""
+    patient_id: str = ""
+    diagnosis: str = ""
+    chief_complaint: str = ""
+    treatments: str = ""
+    case_summary: str = ""
+    similarity_score: float
+    created_at: str = ""
+
+
+class SimilarCasesResponse(BaseModel):
+    encounter_id: str
+    query_summary: str
+    similar_cases: List[SimilarCaseResult]
+    total_cases_searched: int
+
+
+class EmbedEncounterResponse(BaseModel):
+    success: bool
+    encounter_id: str
+    message: str
+    embedding_dim: int
+
+
+class FreeTextSearchRequest(BaseModel):
+    query: str
+    top_k: int = 5
