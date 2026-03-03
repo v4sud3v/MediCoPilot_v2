@@ -109,17 +109,5 @@ CREATE TABLE public.patients (
   email text,
   CONSTRAINT patients_pkey PRIMARY KEY (id)
 );
-CREATE TABLE public.case_embeddings (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  encounter_id uuid NOT NULL,
-  doctor_id uuid,
-  patient_id uuid,
-  case_summary text,
-  embedding text,
-  diagnosis text,
-  chief_complaint text,
-  treatments text,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT case_embeddings_pkey PRIMARY KEY (id),
-  CONSTRAINT case_embeddings_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES public.encounters(id) ON DELETE CASCADE
-);
+-- case_embeddings table REMOVED: vectors are now stored in ChromaDB (local vector database)
+-- The case similarity system uses BERT (sentence-transformers) + ChromaDB instead of Supabase.

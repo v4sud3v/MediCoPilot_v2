@@ -198,6 +198,7 @@ class SimilarCaseResult(BaseModel):
     patient_id: str = ""
     diagnosis: str = ""
     chief_complaint: str = ""
+    similarity_method: str = "bert-cosine"
     treatments: str = ""
     case_summary: str = ""
     similarity_score: float
@@ -209,6 +210,7 @@ class SimilarCasesResponse(BaseModel):
     query_summary: str
     similar_cases: List[SimilarCaseResult]
     total_cases_searched: int
+    similarity_method: str = "BERT + ChromaDB"
 
 
 class EmbedEncounterResponse(BaseModel):

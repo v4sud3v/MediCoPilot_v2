@@ -11,5 +11,5 @@ google-genai
 openai
 reportlab
 python-dateutil
-nltk
-scikit-learn
+sentence-transformers
+chromadb

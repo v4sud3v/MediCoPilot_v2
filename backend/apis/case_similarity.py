@@ -1,61 +1,59 @@
 """
-Case-Based Similarity API
+Case-Based Similarity API  —  BERT + ChromaDB Edition
+=====================================================
 
-Uses NLTK for text preprocessing (tokenization, stopword removal, stemming)
-and scikit-learn TF-IDF vectorization + cosine similarity.
-No BERT, no torch, no heavy model downloads.
+Uses **sentence-transformers** (BERT) to encode clinical encounter text
+into dense vectors and **ChromaDB** (local, persistent vector DB) for
+fast cosine-similarity search.
 
 Pipeline:
-  1. build_case_text()  — extract clinical fields into one string
-  2. preprocess()       — NLTK tokenize → lowercase → remove stopwords → Porter stem
-  3. TfidfVectorizer    — fit on all stored case texts + query at search time
-  4. cosine_similarity  — rank and return top-K
+  1. **Vectorisation** — encode encounter text with a BERT sentence model
+     (default ``all-MiniLM-L6-v2``, 384-dim).
+  2. **Storage** — upsert the vector + metadata into ChromaDB (no Supabase
+     storage of embeddings / entities).
+  3. **Retrieval** — query ChromaDB with the source encounter (or free text)
+     and return the top-K most similar past cases ranked by cosine similarity.
 
 Endpoints:
   POST /case-similarity/index/{encounter_id}      – index one encounter
-  POST /case-similarity/index-all/{doctor_id}      – batch index all encounters for a doctor
+  POST /case-similarity/index-all/{doctor_id}      – batch-index all for a doctor
   GET  /case-similarity/similar/{encounter_id}     – find similar past cases
   POST /case-similarity/search                     – search by free-text query
+  GET  /case-similarity/stats                      – vector DB statistics
 """
 
 import os
-import re
 import uuid
-from typing import List, Optional
-
-import nltk
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
-from nltk.stem import PorterStemmer
-
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from supabase import create_client, Client
+
 from datamodel import (
     SimilarCaseResult,
     SimilarCasesResponse,
     EmbedEncounterResponse,
     FreeTextSearchRequest,
 )
-
-# ---------------------------------------------------------------------------
-# NLTK setup (download data files once)
-# ---------------------------------------------------------------------------
-for _pkg in ("punkt", "punkt_tab", "stopwords"):
-    nltk.download(_pkg, quiet=True)
-
-_stemmer = PorterStemmer()
-_stop_words = set(stopwords.words("english"))
+from vector_service import VectorService
 
 router = APIRouter(prefix="/case-similarity", tags=["Case Similarity"])
 
-# Initialize Supabase client
+# Supabase client  (still used to read encounters / doctors — NOT for vectors)
 supabase: Client = create_client(
     os.getenv("SUPABASE_URL"),
     os.getenv("SUPABASE_SECRET_KEY"),
 )
+
+# Lazy-initialised vector service (model loads on first use)
+_vs: Optional[VectorService] = None
+
+
+def _get_vs() -> VectorService:
+    global _vs
+    if _vs is None:
+        _vs = VectorService.get_instance()
+    return _vs
 
 
 # ---------------------------------------------------------------------------
@@ -63,10 +61,7 @@ supabase: Client = create_client(
 # ---------------------------------------------------------------------------
 
 def build_case_text(encounter: dict) -> str:
-    """
-    Build a single text string from encounter fields.
-    Only includes non-empty fields.
-    """
+    """Build a single text string from encounter fields."""
     fields = [
         ("Chief Complaint", encounter.get("chief_complaint")),
         ("Diagnosis", encounter.get("diagnosis")),
@@ -79,165 +74,43 @@ def build_case_text(encounter: dict) -> str:
     return " | ".join(parts) if parts else ""
 
 
-def preprocess(text: str) -> str:
-    """
-    NLTK preprocessing pipeline:
-      1. Lowercase
-      2. Remove non-alphabetic characters (keep spaces)
-      3. Tokenize with word_tokenize
-      4. Remove English stopwords
-      5. Apply Porter stemming
-    Returns a single cleaned string ready for TF-IDF.
-    """
-    text = text.lower()
-    text = re.sub(r"[^a-z\s]", " ", text)
-    tokens = word_tokenize(text)
-    tokens = [_stemmer.stem(t) for t in tokens if t not in _stop_words and len(t) > 1]
-    return " ".join(tokens)
-
-
-# ---------------------------------------------------------------------------
-# TF-IDF similarity (computed at query time — no stored vectors needed)
-# ---------------------------------------------------------------------------
-
-def compute_similarity(
-    query_text: str,
-    case_rows: List[dict],
-    top_k: int = 5,
-    exclude_encounter_id: Optional[str] = None,
-) -> List[dict]:
-    """
-    1. Preprocess query + all stored case_summary texts
-    2. Fit TfidfVectorizer on the combined corpus
-    3. Compute cosine similarity between query vector and each case vector
-    4. Return top_k results sorted by score descending
-
-    Parameters
-    ----------
-    query_text : raw clinical text (not yet preprocessed)
-    case_rows  : list of dicts from case_embeddings table
-    top_k      : number of results to return
-    exclude_encounter_id : skip this encounter (self-match)
-    """
-    if not case_rows:
-        return []
-
-    # Filter out the query encounter itself
-    filtered = []
-    for row in case_rows:
-        if exclude_encounter_id and row.get("encounter_id") == exclude_encounter_id:
-            continue
-        summary = row.get("case_summary", "")
-        if summary:
-            filtered.append(row)
-
-    if not filtered:
-        return []
-
-    # Preprocess all texts: query first, then each case
-    query_clean = preprocess(query_text)
-    corpus = [query_clean] + [preprocess(r["case_summary"]) for r in filtered]
-
-    # TF-IDF vectorization with unigrams + bigrams
-    vectorizer = TfidfVectorizer(ngram_range=(1, 2), max_features=5000)
-    tfidf_matrix = vectorizer.fit_transform(corpus)  # sparse matrix (N+1, features)
-
-    query_vec = tfidf_matrix[0:1]   # first row = query
-    case_vecs = tfidf_matrix[1:]    # remaining rows = cases
-
-    # Cosine similarity
-    sims = cosine_similarity(query_vec, case_vecs)[0]  # shape (N,)
-
-    # Top-K indices
-    top_idx = sims.argsort()[::-1][:top_k]
-
-    results = []
-    for idx in top_idx:
-        entry = {**filtered[idx]}
-        entry["similarity_score"] = round(float(sims[idx]), 4)
-        # Don't send the raw embedding/summary blob back
-        entry.pop("embedding", None)
-        results.append(entry)
-
-    return results
-
-
-# ---------------------------------------------------------------------------
-# Supabase helpers
-# ---------------------------------------------------------------------------
-
-def store_case_index(encounter_id: str, doctor_id: str, patient_id: str,
-                     case_summary: str, diagnosis: str = "",
-                     chief_complaint: str = "", treatments: str = ""):
-    """
-    Insert or update a row in case_embeddings.
-    We store the case_summary text (no vector needed — TF-IDF is computed
-    at query time).  The embedding column is left empty.
-    """
-    existing = supabase.table("case_embeddings").select("id").eq(
-        "encounter_id", encounter_id
-    ).execute()
-
-    row = {
-        "encounter_id": encounter_id,
-        "doctor_id": doctor_id,
-        "patient_id": patient_id,
-        "case_summary": case_summary,
-        "embedding": "",
-        "diagnosis": diagnosis or "",
-        "chief_complaint": chief_complaint or "",
-        "treatments": treatments or "",
-    }
-
-    if existing.data:
-        supabase.table("case_embeddings").update(row).eq(
-            "encounter_id", encounter_id
-        ).execute()
-    else:
-        supabase.table("case_embeddings").insert(row).execute()
-
-
-def fetch_all_cases(doctor_id: Optional[str] = None) -> List[dict]:
-    """Fetch all indexed cases, optionally filtered by doctor."""
-    query = supabase.table("case_embeddings").select(
-        "encounter_id, doctor_id, patient_id, case_summary, "
-        "diagnosis, chief_complaint, treatments, created_at"
-    )
-    if doctor_id:
-        query = query.eq("doctor_id", doctor_id)
-    return query.execute().data or []
-
-
-def fetch_all_cases_all_doctors() -> List[dict]:
-    """Fetch indexed cases from ALL doctors."""
-    return supabase.table("case_embeddings").select(
-        "encounter_id, doctor_id, patient_id, case_summary, "
-        "diagnosis, chief_complaint, treatments, created_at"
-    ).execute().data or []
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def _fetch_encounter(encounter_id: str) -> dict:
-    """Fetch a single encounter row from Supabase."""
-    resp = supabase.table("encounters").select("*").eq(
-        "id", encounter_id
-    ).maybe_single().execute()
+    resp = (
+        supabase.table("encounters")
+        .select("*")
+        .eq("id", encounter_id)
+        .maybe_single()
+        .execute()
+    )
     if not resp.data:
         raise HTTPException(status_code=404, detail=f"Encounter {encounter_id} not found")
     return resp.data
 
 
-# ------------------------------------------------------------------ routes
+def _doctor_name(doctor_id: str) -> str:
+    if not doctor_id:
+        return "Unknown"
+    doc_resp = (
+        supabase.table("doctors")
+        .select("name")
+        .eq("id", doctor_id)
+        .maybe_single()
+        .execute()
+    )
+    return doc_resp.data.get("name", "Unknown") if doc_resp.data else "Unknown"
 
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
 
 @router.post("/index/{encounter_id}", response_model=EmbedEncounterResponse)
 async def index_encounter(encounter_id: str):
     """
-    Index a single encounter for similarity search.
-    Extracts text, preprocesses it, and stores the summary in case_embeddings.
+    Index a single encounter for BERT-based similarity search.
+
+    Encodes the clinical text with a sentence-transformer model and stores
+    the resulting vector in ChromaDB.
     """
     try:
         uuid.UUID(encounter_id)
@@ -249,34 +122,28 @@ async def index_encounter(encounter_id: str):
     if not case_text:
         raise HTTPException(status_code=400, detail="Encounter has no text fields to index")
 
-    store_case_index(
+    vs = _get_vs()
+    dim = vs.index_encounter(
         encounter_id=encounter_id,
+        case_text=case_text,
         doctor_id=encounter.get("doctor_id", ""),
         patient_id=encounter.get("patient_id", ""),
-        case_summary=case_text,
         diagnosis=encounter.get("diagnosis", ""),
         chief_complaint=encounter.get("chief_complaint", ""),
         treatments=encounter.get("medications", ""),
     )
 
-    # Return the preprocessed token count so caller knows what was indexed
-    cleaned = preprocess(case_text)
-    token_count = len(cleaned.split())
-
     return EmbedEncounterResponse(
         success=True,
         encounter_id=encounter_id,
-        message=f"Encounter indexed successfully ({token_count} stemmed tokens)",
-        embedding_dim=token_count,
+        message=f"Encounter indexed with BERT ({dim}-dim vector stored in ChromaDB)",
+        embedding_dim=dim,
     )
 
 
 @router.post("/index-all/{doctor_id}", response_model=dict)
 async def index_all_encounters(doctor_id: str):
-    """
-    Batch-index ALL encounters for a given doctor.
-    Useful for initial backfill.
-    """
+    """Batch-index ALL encounters for a given doctor using BERT."""
     try:
         uuid.UUID(doctor_id)
     except ValueError:
@@ -287,26 +154,29 @@ async def index_all_encounters(doctor_id: str):
     if not encounters:
         return {"success": True, "indexed": 0, "message": "No encounters found for this doctor"}
 
-    count = 0
+    vs = _get_vs()
+    batch = []
     for enc in encounters:
         text = build_case_text(enc)
         if not text:
             continue
-        store_case_index(
-            encounter_id=enc["id"],
-            doctor_id=enc.get("doctor_id", ""),
-            patient_id=enc.get("patient_id", ""),
-            case_summary=text,
-            diagnosis=enc.get("diagnosis", ""),
-            chief_complaint=enc.get("chief_complaint", ""),
-            treatments=enc.get("medications", ""),
-        )
-        count += 1
+        batch.append({
+            "encounter_id": enc["id"],
+            "case_text": text,
+            "doctor_id": enc.get("doctor_id", ""),
+            "patient_id": enc.get("patient_id", ""),
+            "diagnosis": enc.get("diagnosis", ""),
+            "chief_complaint": enc.get("chief_complaint", ""),
+            "treatments": enc.get("medications", ""),
+        })
+
+    count = vs.index_encounters_batch(batch)
 
     return {
         "success": True,
         "indexed": count,
-        "message": f"Indexed {count} encounters for doctor {doctor_id}",
+        "embedding_dim": vs.stats["embedding_dim"],
+        "message": f"Indexed {count} encounters for doctor {doctor_id} (BERT + ChromaDB)",
     }
 
 
@@ -317,15 +187,12 @@ async def get_similar_cases(
     same_doctor_only: bool = Query(False, description="Only search within same doctor's cases"),
 ):
     """
-    Find the top-K most similar past cases for a given encounter.
+    Find the top-K most similar past cases using BERT cosine similarity.
 
     Pipeline:
-      1. Build query text from encounter fields
-      2. Fetch all indexed case summaries from Supabase
-      3. Preprocess all texts with NLTK (tokenize → stopwords → stem)
-      4. Fit TF-IDF vectorizer on the corpus
-      5. Compute cosine similarity
-      6. Return top-K with treatments, diagnosis, doctor info
+      1. Encode the query encounter text with BERT
+      2. Query ChromaDB for nearest neighbours (cosine)
+      3. Return ranked results
     """
     try:
         uuid.UUID(encounter_id)
@@ -337,49 +204,29 @@ async def get_similar_cases(
     if not case_text:
         raise HTTPException(status_code=400, detail="Encounter has no text fields to compare")
 
-    # Fetch all indexed cases
-    all_cases = fetch_all_cases_all_doctors()
-    if not all_cases:
-        return SimilarCasesResponse(
-            encounter_id=encounter_id,
-            query_summary=case_text,
-            similar_cases=[],
-            total_cases_searched=0,
-        )
+    vs = _get_vs()
 
-    # Optionally filter to same doctor
-    if same_doctor_only:
-        doctor_id = encounter.get("doctor_id")
-        all_cases = [c for c in all_cases if c.get("doctor_id") == doctor_id]
+    doctor_id_filter = encounter.get("doctor_id") if same_doctor_only else None
 
-    results = compute_similarity(
-        query_text=case_text,
-        case_rows=all_cases,
+    results = vs.query_similar(
+        text=case_text,
         top_k=top_k,
-        exclude_encounter_id=encounter_id,
+        exclude_id=encounter_id,
+        doctor_id=doctor_id_filter,
     )
-
-    # Enrich with doctor name
-    for r in results:
-        did = r.get("doctor_id")
-        if did:
-            doc_resp = supabase.table("doctors").select("name").eq("id", did).maybe_single().execute()
-            r["doctor_name"] = doc_resp.data.get("name", "Unknown") if doc_resp.data else "Unknown"
-        else:
-            r["doctor_name"] = "Unknown"
 
     similar = [
         SimilarCaseResult(
             encounter_id=r["encounter_id"],
             doctor_id=r.get("doctor_id", ""),
-            doctor_name=r.get("doctor_name", ""),
+            doctor_name=_doctor_name(r.get("doctor_id", "")),
             patient_id=r.get("patient_id", ""),
             diagnosis=r.get("diagnosis", ""),
             chief_complaint=r.get("chief_complaint", ""),
             treatments=r.get("treatments", ""),
             case_summary=r.get("case_summary", ""),
             similarity_score=r["similarity_score"],
-            created_at=r.get("created_at", ""),
+            similarity_method="bert-cosine",
         )
         for r in results
     ]
@@ -388,54 +235,40 @@ async def get_similar_cases(
         encounter_id=encounter_id,
         query_summary=case_text,
         similar_cases=similar,
-        total_cases_searched=len(all_cases),
+        total_cases_searched=vs.total_indexed,
+        similarity_method="BERT + ChromaDB",
     )
 
 
 @router.post("/search", response_model=SimilarCasesResponse)
 async def search_by_text(request: FreeTextSearchRequest):
     """
-    Search for similar cases using free-text input (e.g. symptoms, diagnosis).
-    Useful when a clinician wants to search without an existing encounter.
+    Search for similar cases using free-text input (symptoms, diagnosis, etc.).
+
+    Encodes the query with BERT and searches ChromaDB for the nearest cases.
     """
     if not request.query.strip():
         raise HTTPException(status_code=400, detail="Query text is required")
 
-    all_cases = fetch_all_cases_all_doctors()
-    if not all_cases:
-        return SimilarCasesResponse(
-            encounter_id="",
-            query_summary=request.query,
-            similar_cases=[],
-            total_cases_searched=0,
-        )
+    vs = _get_vs()
 
-    results = compute_similarity(
-        query_text=request.query,
-        case_rows=all_cases,
+    results = vs.query_similar(
+        text=request.query,
         top_k=request.top_k,
     )
-
-    for r in results:
-        did = r.get("doctor_id")
-        if did:
-            doc_resp = supabase.table("doctors").select("name").eq("id", did).maybe_single().execute()
-            r["doctor_name"] = doc_resp.data.get("name", "Unknown") if doc_resp.data else "Unknown"
-        else:
-            r["doctor_name"] = "Unknown"
 
     similar = [
         SimilarCaseResult(
             encounter_id=r["encounter_id"],
             doctor_id=r.get("doctor_id", ""),
-            doctor_name=r.get("doctor_name", ""),
+            doctor_name=_doctor_name(r.get("doctor_id", "")),
             patient_id=r.get("patient_id", ""),
             diagnosis=r.get("diagnosis", ""),
             chief_complaint=r.get("chief_complaint", ""),
             treatments=r.get("treatments", ""),
             case_summary=r.get("case_summary", ""),
             similarity_score=r["similarity_score"],
-            created_at=r.get("created_at", ""),
+            similarity_method="bert-cosine",
         )
         for r in results
     ]
@@ -444,5 +277,21 @@ async def search_by_text(request: FreeTextSearchRequest):
         encounter_id="",
         query_summary=request.query,
         similar_cases=similar,
-        total_cases_searched=len(all_cases),
+        total_cases_searched=vs.total_indexed,
+        similarity_method="BERT + ChromaDB",
     )
+
+
+@router.get("/stats")
+async def get_stats():
+    """Return statistics about the BERT vector service and ChromaDB."""
+    vs = _get_vs()
+    return {
+        "success": True,
+        "vector_service": vs.stats,
+        "description": (
+            "Case similarity uses sentence-transformers (BERT) to encode "
+            "clinical text into dense vectors and ChromaDB for fast "
+            "cosine-similarity retrieval."
+        ),
+    }
