@@ -30,14 +30,21 @@ class EncounterDetailPage extends StatefulWidget {
 class EncounterDetailPageState extends State<EncounterDetailPage> {
   late List<Map<String, String>> _files;
   final _encounterService = EncounterService();
+  final _apiService = ApiService();
   List<Map<String, dynamic>> _caseVisits = [];
   bool _isLoadingVisits = false;
+
+  // Similar cases state
+  List<Map<String, dynamic>> _similarCases = [];
+  bool _isLoadingSimilar = false;
+  String? _similarError;
 
   @override
   void initState() {
     super.initState();
     _files = List.from(widget.initialEncounterFiles);
     _loadCaseVisits();
+    _loadSimilarCases();
   }
 
   Future<void> _loadCaseVisits() async {
@@ -61,6 +68,45 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
       if (mounted) {
         setState(() {
           _isLoadingVisits = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadSimilarCases() async {
+    final encounterId = widget.encounter['id'];
+    if (encounterId == null) return;
+
+    setState(() {
+      _isLoadingSimilar = true;
+      _similarError = null;
+    });
+
+    try {
+      // Index this encounter first (idempotent upsert)
+      await _apiService.indexEncounterForSimilarity(encounterId.toString());
+
+      // Then query for similar cases
+      final result = await _apiService.getSimilarCases(
+        encounterId.toString(),
+        topK: 5,
+      );
+
+      if (mounted) {
+        final cases = (result['similar_cases'] as List<dynamic>? ?? [])
+            .map((c) => Map<String, dynamic>.from(c as Map))
+            .toList();
+        setState(() {
+          _similarCases = cases;
+          _isLoadingSimilar = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading similar cases: $e');
+      if (mounted) {
+        setState(() {
+          _similarError = 'Could not load similar cases';
+          _isLoadingSimilar = false;
         });
       }
     }
@@ -607,7 +653,7 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
                     ),
                   ),
                   const SizedBox(width: 24),
-                  // Right Column - Vitals & Documents
+                  // Right Column - Vitals, Documents & Similar Cases
                   Expanded(
                     flex: 1,
                     child: Column(
@@ -615,6 +661,8 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
                         _buildVitalsCard(),
                         const SizedBox(height: 20),
                         _buildDocumentsCard(context),
+                        const SizedBox(height: 20),
+                        _buildSimilarCasesCard(),
                       ],
                     ),
                   ),
@@ -1216,6 +1264,310 @@ class EncounterDetailPageState extends State<EncounterDetailPage> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSimilarCasesCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withAlpha(25),
+            spreadRadius: 1,
+            blurRadius: 5,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8B5CF6).withAlpha(25),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.compare_arrows,
+                  color: Color(0xFF8B5CF6),
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Similar Cases',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+              ),
+              if (!_isLoadingSimilar && _similarError == null)
+                IconButton(
+                  icon: const Icon(Icons.refresh, size: 20),
+                  onPressed: _loadSimilarCases,
+                  tooltip: 'Refresh similar cases',
+                  color: Colors.grey.shade600,
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_isLoadingSimilar)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    SizedBox(height: 12),
+                    Text(
+                      'Finding similar cases...',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (_similarError != null)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.orange.shade700, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _similarError!,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.orange.shade700,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh, size: 18),
+                    onPressed: _loadSimilarCases,
+                    color: Colors.orange.shade700,
+                  ),
+                ],
+              ),
+            )
+          else if (_similarCases.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.search_off,
+                      size: 48,
+                      color: Colors.grey.shade300,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'No similar cases found',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Similar cases will appear as more encounters are recorded',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade500,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            ..._similarCases.map((c) => _buildSimilarCaseItem(c)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSimilarCaseItem(Map<String, dynamic> caseData) {
+    final score = (caseData['similarity_score'] as num?)?.toDouble() ?? 0.0;
+    final percentage = (score * 100).round();
+
+    Color scoreColor;
+    if (score >= 0.8) {
+      scoreColor = const Color(0xFF059669);
+    } else if (score >= 0.5) {
+      scoreColor = const Color(0xFFD97706);
+    } else {
+      scoreColor = const Color(0xFFDC2626);
+    }
+
+    final diagnosis = caseData['diagnosis'] ?? '';
+    final chiefComplaint = caseData['chief_complaint'] ?? '';
+    final treatments = caseData['treatments'] ?? '';
+    final encounterId = caseData['encounter_id'] ?? '';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () async {
+            try {
+              final fullEncounter = await _encounterService.getEncounterById(encounterId);
+              if (mounted) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => EncounterDetailPage(
+                      encounter: fullEncounter,
+                      initialEncounterFiles: const [],
+                      onUploadFile: widget.onUploadFile,
+                      onDeleteFile: widget.onDeleteFile,
+                      onViewFile: widget.onViewFile,
+                    ),
+                  ),
+                );
+              }
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Could not open encounter: $e'),
+                    backgroundColor: Colors.red.shade700,
+                  ),
+                );
+              }
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: scoreColor.withAlpha(25),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '$percentage% match',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: scoreColor,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      Icons.open_in_new,
+                      size: 14,
+                      color: Colors.grey.shade400,
+                    ),
+                  ],
+                ),
+                if (chiefComplaint.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    chiefComplaint,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E293B),
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                if (diagnosis.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.medical_information_outlined,
+                        size: 14,
+                        color: Colors.grey.shade500,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          diagnosis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (treatments.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.medication_outlined,
+                        size: 14,
+                        color: Colors.grey.shade500,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          treatments,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

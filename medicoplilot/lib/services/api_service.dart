@@ -393,4 +393,32 @@ class ApiService {
   String getDownloadUrl(String documentId) {
     return '${ApiConfig.baseUrl}/documents/$documentId/download';
   }
+
+  // Case Similarity endpoints
+
+  /// Index (upsert) an encounter into the BERT + ChromaDB vector store.
+  Future<dynamic> indexEncounterForSimilarity(String encounterId) async {
+    return post(
+      '/case-similarity/index/$encounterId',
+      {},
+      requiresAuth: false,
+    );
+  }
+
+  /// Find the top-K most similar past cases for a given encounter.
+  Future<dynamic> getSimilarCases(
+    String encounterId, {
+    int topK = 5,
+    bool sameDoctorOnly = false,
+  }) async {
+    return get(
+      '/case-similarity/similar/$encounterId?top_k=$topK&same_doctor_only=$sameDoctorOnly',
+      requiresAuth: false,
+    );
+  }
+
+  /// Get statistics about the BERT vector service and ChromaDB.
+  Future<dynamic> getCaseSimilarityStats() async {
+    return get('/case-similarity/stats', requiresAuth: false);
+  }
 }
