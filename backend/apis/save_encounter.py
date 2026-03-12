@@ -3,6 +3,7 @@ from supabase import create_client, Client
 from datamodel import SaveEncounterRequest, SaveEncounterResponse
 from openai import OpenAI
 from medicine_pdf_generator import parse_medications_string
+from vector_service import VectorService
 import os
 from dotenv import load_dotenv
 import uuid
@@ -372,6 +373,30 @@ async def save_encounter(request: SaveEncounterRequest) -> SaveEncounterResponse
             except Exception as e:
                 print(f"Error saving patient summary: {e}")
         
+        # Auto-index into ChromaDB for case similarity search
+        try:
+            vs = VectorService.get_instance()
+            fields = [
+                ("Chief Complaint", encounter_data.get("chief_complaint")),
+                ("Diagnosis",       encounter_data.get("diagnosis")),
+                ("History",         encounter_data.get("history_of_illness")),
+                ("Medications",     encounter_data.get("medications")),
+            ]
+            case_text = " | ".join(f"{k}: {v}" for k, v in fields if v)
+            if case_text:
+                vs.index_encounter(
+                    encounter_id=encounter_id,
+                    case_text=case_text,
+                    doctor_id=request.doctor_id or "",
+                    patient_id=patient_id or "",
+                    diagnosis=request.diagnosis or "",
+                    chief_complaint=request.chief_complaint or "",
+                    treatments=request.medications or "",
+                )
+        except Exception as e:
+            # Never block the save if ChromaDB indexing fails
+            print(f"Warning: ChromaDB auto-index failed for {encounter_id}: {e}")
+
         return SaveEncounterResponse(
             success=True,
             encounter_id=encounter_id,
