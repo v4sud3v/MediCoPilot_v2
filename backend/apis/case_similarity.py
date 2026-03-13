@@ -282,6 +282,44 @@ async def search_by_text(request: FreeTextSearchRequest):
     )
 
 
+@router.post("/index-all", response_model=dict)
+async def index_all_encounters_global():
+    """
+    Bulk-index ALL encounters from ALL doctors into ChromaDB.
+    Run this once to backfill existing encounters.
+    """
+    resp = supabase.table("encounters").select("*").execute()
+    encounters = resp.data or []
+    if not encounters:
+        return {"success": True, "indexed": 0, "message": "No encounters found"}
+
+    vs = _get_vs()
+    batch = []
+    for enc in encounters:
+        text = build_case_text(enc)
+        if not text:
+            continue
+        batch.append({
+            "encounter_id": enc["id"],
+            "case_text": text,
+            "doctor_id": enc.get("doctor_id", ""),
+            "patient_id": enc.get("patient_id", ""),
+            "diagnosis": enc.get("diagnosis", ""),
+            "chief_complaint": enc.get("chief_complaint", ""),
+            "treatments": enc.get("medications", ""),
+        })
+
+    count = vs.index_encounters_batch(batch)
+
+    return {
+        "success": True,
+        "indexed": count,
+        "total_in_db": len(encounters),
+        "embedding_dim": vs.stats["embedding_dim"],
+        "message": f"Backfilled {count} encounters from all doctors into ChromaDB",
+    }
+
+
 @router.get("/stats")
 async def get_stats():
     """Return statistics about the BERT vector service and ChromaDB."""

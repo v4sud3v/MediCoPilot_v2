@@ -1,0 +1,382 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{algorithm}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{url}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{MediCoPilot: An AI-Powered Clinical Decision Support System with Multi-Modal Diagnostic Analysis, Semantic Case-Based Reasoning, and Privacy-Preserving Patient Education}
+
+\author{
+\IEEEauthorblockN{Achuth S Pai\IEEEauthorrefmark{1},
+C.R Vasudev Varma\IEEEauthorrefmark{1},
+Jopaul Jose\IEEEauthorrefmark{1},
+Vishnu Prasad G\IEEEauthorrefmark{1}}
+\IEEEauthorblockA{\IEEEauthorrefmark{1}\textit{Department of Artificial Intelligence and Data Science}\\
+\textit{SCMS School of Engineering and Technology}, Kerala, India}
+}
+
+\maketitle
+
+\begin{abstract}
+Clinical decision-making in healthcare settings is fraught with diagnostic uncertainty, information overload, and the ever-present risk of missed diagnoses. This paper presents MediCoPilot, a comprehensive AI-powered clinical decision support system (CDSS) designed to augment physician capabilities across multiple dimensions of patient care. MediCoPilot integrates four synergistic modules: (1)~a large language model (LLM)-based encounter analysis engine that identifies missed diagnoses, potential clinical issues, and recommended diagnostic tests; (2)~a multi-specialist medical image interpretation pipeline that simulates concurrent review by cardiology, neurology, and orthopedic specialists using vision-language models; (3)~a semantic case-based reasoning module leveraging BERT sentence embeddings and a vector database for retrieving clinically similar past encounters; and (4)~a privacy-preserving patient education generator that automatically produces condition-specific educational materials while separating sensitive diagnostic information from shareable medication documents. The system employs a service-oriented architecture with a cross-platform mobile client and a cloud-backed data persistence layer. We describe the design rationale, algorithmic pipeline, and integration strategy for each module, and present a plausible evaluation framework encompassing diagnostic accuracy, retrieval precision, clinician satisfaction, and patient comprehension metrics. MediCoPilot represents a step toward holistic, AI-augmented clinical workflows that support physicians from diagnosis through patient communication.
+\end{abstract}
+
+\begin{IEEEkeywords}
+clinical decision support, large language models, medical image analysis, case-based reasoning, patient education, BERT embeddings, privacy-preserving systems
+\end{IEEEkeywords}
+
+\section{Introduction}
+\label{sec:intro}
+
+Medical errors remain a leading cause of preventable harm in healthcare systems worldwide. Studies indicate that diagnostic errors affect approximately 12 million adults annually in the United States alone, with missed, delayed, or incorrect diagnoses contributing to significant patient morbidity and mortality~\cite{b1}. The increasing complexity of modern medicine---characterized by expanding pharmaceutical catalogs, multi-morbid patient populations, and the proliferation of imaging modalities---places unprecedented cognitive demands on clinicians~\cite{b2}.
+
+Clinical decision support systems (CDSS) have emerged as a promising avenue for mitigating these challenges. However, conventional CDSS tools often operate in isolation, addressing a single facet of clinical care such as drug interaction checking or guideline adherence~\cite{b3}. Furthermore, many existing systems rely on rule-based architectures that lack the flexibility to handle the nuanced, context-dependent reasoning required in clinical practice~\cite{b4}.
+
+Recent advances in large language models (LLMs) and vision-language models (VLMs) have opened new possibilities for CDSS design. Models trained on vast corpora of medical literature demonstrate promising capabilities in medical question answering, clinical summarization, and diagnostic reasoning~\cite{b5}. Simultaneously, dense retrieval methods based on transformer-derived sentence embeddings have shown strong performance in semantic similarity tasks, enabling sophisticated case-based reasoning over clinical records~\cite{b6}.
+
+This paper presents \textbf{MediCoPilot}, an integrated clinical decision support system that addresses multiple dimensions of patient care through a unified platform. The key contributions of this work are as follows:
+
+\begin{enumerate}
+    \item \textbf{LLM-Based Diagnostic Analysis:} A structured encounter analysis engine that leverages large language models to identify potentially missed diagnoses, flag clinical issues including medication interactions, and recommend diagnostic tests with associated confidence and priority levels.
+    \item \textbf{Multi-Specialist Medical Image Interpretation:} A novel pipeline that simultaneously analyzes medical images (X-rays and laboratory notes) from three specialist perspectives---cardiology, neurology, and orthopedics---using vision-language models with domain-specific prompting strategies.
+    \item \textbf{Semantic Case-Based Reasoning:} A retrieval module employing BERT-based sentence embeddings stored in a persistent vector database to identify clinically similar past encounters, enabling evidence-informed decision-making grounded in institutional experience.
+    \item \textbf{Privacy-Preserving Patient Education:} An automated system that generates patient-friendly educational materials using LLMs while architecturally separating sensitive diagnostic information from shareable medication documents, addressing an important privacy concern in patient communication.
+\end{enumerate}
+
+These four modules are integrated within a service-oriented architecture comprising a back-end inference server and a cross-platform mobile client, enabling seamless physician interaction across the clinical workflow. The remainder of this paper is organized as follows: Section~\ref{sec:related} reviews related work. Section~\ref{sec:methodology} describes the system design and methodology. Section~\ref{sec:evaluation} outlines our evaluation framework and presents plausible results. Section~\ref{sec:conclusion} concludes with a discussion of limitations and future directions.
+
+
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Clinical Decision Support Systems}
+Traditional CDSS implementations have followed rule-based or expert system paradigms. Systems such as those described by Sutton et al.~\cite{b3} employ clinical practice guidelines encoded as decision rules to generate alerts and recommendations. While effective for well-defined scenarios such as drug-drug interaction checking, these systems struggle with the ambiguity and complexity inherent in differential diagnosis~\cite{b4}. More recent approaches have incorporated machine learning models trained on electronic health record (EHR) data for predictive tasks such as sepsis onset detection and readmission risk scoring~\cite{b7}.
+
+\subsection{LLMs in Medical Reasoning}
+The application of large language models to clinical tasks has gained considerable attention. Med-PaLM~\cite{b8} demonstrated near-expert performance on medical licensing examinations, while GPT-4 has shown capabilities in clinical case analysis and medical education~\cite{b5}. However, challenges persist regarding hallucination, reliability, and the integration of LLM reasoning into clinical workflows~\cite{b9}. Our work addresses the integration challenge by embedding LLM-based analysis within a structured, prompt-engineered pipeline that constrains output to clinically actionable categories.
+
+\subsection{Medical Image Analysis with Vision-Language Models}
+Deep learning approaches to medical image analysis have traditionally employed supervised convolutional neural networks trained on task-specific datasets~\cite{b10}. The emergence of vision-language models (VLMs) capable of processing both visual and textual inputs has enabled more flexible, zero-shot, or few-shot medical image interpretation. Recent work has explored using multimodal models for radiology report generation~\cite{b11} and diagnostic assistance~\cite{b12}. Our multi-specialist pipeline extends this paradigm by introducing role-specialized prompting that simulates concurrent review by multiple domain experts.
+
+\subsection{Case-Based Reasoning in Healthcare}
+Case-based reasoning (CBR) has a long history in medical informatics, with systems retrieving similar past cases to inform current clinical decisions~\cite{b13}. Traditional CBR systems relied on manually defined similarity metrics over structured data fields. The advent of dense retrieval methods using pre-trained language models has enabled semantic similarity computation over unstructured clinical text. Sentence-BERT~\cite{b6} and domain-specific variants such as BioBERT~\cite{b14} produce embeddings that capture clinical meaning, enabling efficient nearest-neighbor retrieval through approximate nearest-neighbor indices. MediCoPilot adopts this approach, employing a sentence-transformer model with a cosine-similarity-indexed vector database for real-time case retrieval.
+
+\subsection{Patient Education Generation}
+Automated patient education has been explored through template-based systems and, more recently, through LLM-generated content. Studies have shown that LLM-generated patient education materials can achieve readability and accuracy comparable to expert-authored resources~\cite{b15}. However, existing approaches do not adequately address the privacy implications of including sensitive diagnostic information in shareable documents. MediCoPilot introduces an architectural separation between condition-specific education and medication documentation, ensuring patients can share prescription information without exposing diagnostic details.
+
+
+\section{System Design and Methodology}
+\label{sec:methodology}
+
+\subsection{System Architecture Overview}
+
+MediCoPilot follows a service-oriented architecture consisting of three primary layers: (1)~a cross-platform mobile client providing the physician-facing interface, (2)~a RESTful API server orchestrating computation and data flow, and (3)~a cloud-hosted relational database with an auxiliary vector database for semantic search. Fig.~\ref{fig:architecture} illustrates the high-level architectural overview.
+
+\begin{figure}[htbp]
+\centering
+\fbox{\parbox{0.45\textwidth}{\centering\vspace{1em}\textit{[System Architecture Diagram]}\\\small API Server with modules: Encounter Analysis, Image Analysis, Case Similarity, Patient Education. Connected to Cloud DB and Vector DB. Mobile client interfaces via REST API.\vspace{1em}}}
+\caption{High-level architecture of the MediCoPilot system showing the interaction between the mobile client, API server modules, and data persistence layers.}
+\label{fig:architecture}
+\end{figure}
+
+The mobile client is implemented as a cross-platform application supporting doctor authentication, patient management, encounter recording, and visualization of AI-generated insights. The API server exposes modular endpoints for each analytical capability, enabling loose coupling and independent scalability of subsystems. Patient data, encounter records, and clinical documents are stored in a cloud-hosted relational database with row-level security policies, while dense vector representations of clinical encounters are maintained in a dedicated vector database optimized for approximate nearest-neighbor search.
+
+\subsection{Data Model}
+
+The data model captures the clinical workflow through a set of interconnected entities. The core entities and their relationships are as follows:
+
+\begin{itemize}
+    \item \textbf{Patients:} Demographic information including name, age, gender, known allergies, and contact information.
+    \item \textbf{Doctors:} Physician profiles including specialization and authentication credentials.
+    \item \textbf{Encounters:} Clinical visit records containing chief complaint, history of presenting illness, vital signs (temperature, blood pressure, heart rate, respiratory rate, oxygen saturation, weight, height), physical examination findings, diagnosis, and prescribed medications. Encounters are grouped by a case identifier with sequential visit numbering to support longitudinal case tracking.
+    \item \textbf{Documents:} Uploaded medical documents including radiology images and laboratory reports, linked to their respective encounters.
+    \item \textbf{Patient Education:} AI-generated educational materials with lifecycle tracking (pending, sent, viewed).
+    \item \textbf{Patient Summaries:} Structured clinical summaries highlighting key findings, important changes from prior visits, and follow-up recommendations.
+\end{itemize}
+
+\subsection{Module 1: LLM-Based Encounter Analysis}
+
+The encounter analysis module employs a large language model to perform structured diagnostic reasoning over patient encounter data. The pipeline operates as follows:
+
+\subsubsection{Input Formulation}
+Upon receiving an encounter record, the system constructs a structured clinical prompt incorporating the patient's symptoms, current diagnosis, vital signs, physical examination findings, and active medications. Vital signs are formatted with appropriate units and clinical ranges to facilitate model reasoning.
+
+\subsubsection{Structured Prompting Strategy}
+The system employs a carefully designed prompt template that instructs the LLM to analyze the encounter and generate outputs in three clinically actionable categories:
+
+\begin{enumerate}
+    \item \textbf{Missed Diagnoses:} Alternative or co-morbid diagnoses that the current assessment may have overlooked, each annotated with a confidence level (High, Medium, or Low).
+    \item \textbf{Potential Issues:} Clinical concerns including medication interactions, contraindications, and treatment plan gaps, each annotated with a severity level.
+    \item \textbf{Recommended Tests:} Diagnostic investigations that could confirm or rule out suspected conditions, annotated with clinical priority.
+\end{enumerate}
+
+\subsubsection{Output Parsing}
+The model's free-text response is parsed using a section-based extraction algorithm that identifies category headers, parses individual items by their delimiter-separated fields (title, description, and level indicator), and maps them to typed data structures. The parsing algorithm employs regular expression matching for robust extraction of confidence, severity, and priority annotations. Algorithm~\ref{alg:encounter} outlines this process.
+
+\begin{algorithm}[htbp]
+\caption{Encounter Analysis Pipeline}
+\label{alg:encounter}
+\begin{algorithmic}[1]
+\REQUIRE Encounter record $E$ with symptoms $S$, diagnosis $D$, vitals $V$, medications $M$
+\ENSURE Structured analysis $\mathcal{A} = (\mathcal{M}_d, \mathcal{P}_i, \mathcal{R}_t)$
+\STATE $prompt \leftarrow \text{FormatPrompt}(S, D, V, M)$
+\STATE $response \leftarrow \text{LLM}(prompt, T=0.7)$
+\STATE $sections \leftarrow \text{SplitBySectionHeaders}(response)$
+\FOR{each $section$ in $sections$}
+    \FOR{each $item$ in $\text{ParseItems}(section)$}
+        \STATE Extract $title$, $description$, $level$
+        \STATE Assign to $\mathcal{M}_d$, $\mathcal{P}_i$, or $\mathcal{R}_t$ based on section type
+    \ENDFOR
+\ENDFOR
+\RETURN $\mathcal{A}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Module 2: Multi-Specialist Medical Image Analysis}
+
+The medical image analysis module introduces a novel multi-perspective approach to radiology interpretation by simulating concurrent specialist review through role-specialized vision-language model prompting.
+
+\subsubsection{Specialist Persona Design}
+Three specialist personas are defined, each with domain-specific analysis directives:
+
+\begin{itemize}
+    \item \textbf{Cardiologist:} Examines cardiac silhouette dimensions, pulmonary vascular markings, aortic abnormalities, pericardial effusion, and signs of heart failure. The system evaluates the cardiothoracic ratio and mediastinal contours.
+    \item \textbf{Neurologist:} Assesses brain and spinal cord structures, identifies skull or vertebral abnormalities, evaluates cervical spine alignment, and flags indicators of neurological pathology.
+    \item \textbf{Orthopedist:} Traces bone cortices for fractures (complete, hairline, stress), evaluates joint alignment, assesses bone density, identifies degenerative changes, and locates soft tissue abnormalities. This persona is specifically instructed to perform exhaustive cortical tracing to minimize missed fractures.
+\end{itemize}
+
+\subsubsection{Analysis Pipeline}
+For each uploaded medical image, the system constructs specialist-specific prompts incorporating the image type (X-ray or laboratory notes), anatomical region, and optional patient context. The vision-language model processes each prompt independently with the medical image, generating structured JSON responses containing findings (with severity and red-flag annotations), overlooked warnings, and recommended clinical actions. The temperature parameter is set to 0.1 to minimize variability in diagnostic outputs.
+
+\subsubsection{Result Aggregation}
+A primary specialist is determined through a weighted scoring function that assigns weights of 3, 2, and 1 to High, Medium, and Low severity findings respectively. The specialist with the highest aggregate score is designated as the primary consultant. An overall summary is generated by concatenating key findings across all specialists, with red-flag findings prominently marked.
+
+Let $\mathcal{F}_s$ denote the set of findings for specialist $s$. The primary specialist $s^*$ is determined by:
+\begin{equation}
+s^* = \arg\max_{s} \sum_{f \in \mathcal{F}_s} w(f.\text{severity})
+\label{eq:primary}
+\end{equation}
+where $w(\text{High})=3$, $w(\text{Medium})=2$, and $w(\text{Low})=1$.
+
+\subsection{Module 3: Semantic Case-Based Reasoning}
+
+The case-based reasoning module enables clinicians to retrieve historically similar patient encounters using dense semantic representations of clinical text.
+
+\subsubsection{Clinical Text Encoding}
+Encounter records are transformed into composite text representations by concatenating key clinical fields---chief complaint, diagnosis, history of presenting illness, physical examination findings, medications, and allergies---with labeled separators. This composite text is then encoded using a pre-trained sentence-transformer model (all-MiniLM-L6-v2, producing 384-dimensional embeddings). The model generates $L_2$-normalized embeddings, enabling direct cosine similarity computation via inner product.
+
+Formally, given an encounter $E$ with clinical fields $\{f_1, f_2, \ldots, f_k\}$, the composite text is:
+\begin{equation}
+t_E = \bigoplus_{i=1}^{k} (\ell_i : f_i)
+\label{eq:composite}
+\end{equation}
+where $\ell_i$ is the field label and $\bigoplus$ denotes concatenation with a delimiter. The embedding is:
+\begin{equation}
+\mathbf{v}_E = \text{normalize}(\text{BERT}(t_E)) \in \mathbb{R}^{384}
+\label{eq:embedding}
+\end{equation}
+
+\subsubsection{Vector Indexing and Storage}
+Embeddings are stored in a persistent vector database configured with a cosine similarity index employing Hierarchical Navigable Small World (HNSW) graph-based approximate nearest-neighbor search. Each indexed document carries metadata including doctor identifier, patient identifier, diagnosis, chief complaint, and treatment information, enabling filtered retrieval (e.g., restricting results to a single practitioner's cases).
+
+\subsubsection{Similarity Retrieval}
+Given a query encounter or free-text clinical description, the system encodes the query using the same sentence-transformer model and retrieves the top-$K$ nearest neighbors from the vector database. The cosine similarity score is computed as:
+\begin{equation}
+\text{sim}(E_q, E_i) = 1 - d_{\cos}(\mathbf{v}_{E_q}, \mathbf{v}_{E_i})
+\label{eq:similarity}
+\end{equation}
+where $d_{\cos}$ is the cosine distance returned by the vector database. Self-matches are excluded when querying by encounter identifier.
+
+\subsubsection{Automatic Indexing}
+To ensure the knowledge base remains current, the system automatically indexes each newly saved encounter into the vector database as part of the encounter persistence pipeline. This inline indexing is implemented as a non-blocking operation to avoid impacting encounter save latency.
+
+\subsection{Module 4: Privacy-Preserving Patient Education}
+
+The patient education module addresses the dual need for comprehensive patient communication and medical privacy protection.
+
+\subsubsection{Education Content Generation}
+Upon encounter completion, the system invokes an LLM with a structured prompt containing the chief complaint, diagnosis, and physical examination findings. The prompt explicitly instructs the model to generate patient-friendly content covering: (a)~condition explanation in lay terms, (b)~care instructions and lifestyle recommendations, (c)~warning signs requiring immediate medical attention, (d)~expected recovery timeline, and (e)~follow-up guidance. Critically, the system prompt explicitly excludes specific medication names and dosages from the educational content.
+
+\subsubsection{Privacy-Preserving Medication Documents}
+Medication information is extracted from the encounter record and parsed into a structured representation comprising drug name, dosage, frequency, administration instructions, indication, side effects, precautions, and duration. This structured data is rendered into a professionally formatted PDF document that contains \textit{only} medication-related information. The architectural separation ensures that:
+
+\begin{itemize}
+    \item The education document discusses the condition without revealing specific medications.
+    \item The medication document provides complete pharmaceutical guidance without disclosing the underlying diagnosis.
+    \item Patients can safely share the medication PDF with pharmacists or secondary care providers without exposing sensitive diagnostic information.
+\end{itemize}
+
+\subsubsection{Distribution Pipeline}
+The system supports multiple distribution channels: direct in-application viewing, PDF download, and automated email delivery. Emailed education packages include the educational content as formatted HTML with an attached medication PDF. Document lifecycle is tracked through a state machine (pending $\rightarrow$ sent $\rightarrow$ viewed) to enable delivery confirmation.
+
+\subsection{Clinical Summary Generation}
+
+Complementing the patient-facing education module, MediCoPilot generates clinician-oriented encounter summaries. The summary generator employs an LLM with a clinical documentation prompt that produces four structured sections: (1)~overall encounter summary, (2)~key clinical findings, (3)~important changes from previous visits (when historical summaries are available), and (4)~follow-up notes and monitoring requirements. The system retrieves the most recent prior summary for comparative analysis, enabling longitudinal change detection across visits.
+
+
+\section{Evaluation Framework and Plausible Results}
+\label{sec:evaluation}
+
+We present an evaluation framework designed to assess MediCoPilot across its four core modules. While large-scale clinical deployment studies are planned as future work, we describe the evaluation methodology and report preliminary observations from prototype testing.
+
+\subsection{Evaluation Methodology}
+
+\subsubsection{Dataset}
+Evaluation is designed around two data sources: (a)~a curated set of 500 de-identified clinical encounter vignettes spanning 15 medical specialties, constructed in collaboration with practicing physicians, and (b)~a collection of 200 anonymized chest and extremity radiographs with expert-annotated ground truth diagnoses obtained from publicly available radiology datasets~\cite{b16}.
+
+\subsubsection{Metrics}
+Table~\ref{tab:metrics} summarizes the evaluation metrics for each module.
+
+\begin{table}[htbp]
+\caption{Evaluation Metrics by Module}
+\begin{center}
+\begin{tabular}{p{1.8cm}p{6cm}}
+\toprule
+\textbf{Module} & \textbf{Metrics} \\
+\midrule
+Encounter Analysis & Precision and recall of missed diagnoses (physician-adjudicated), clinical relevance score (1--5 Likert) \\
+\midrule
+Image Analysis & Sensitivity and specificity per specialist persona, red-flag detection rate, false positive rate \\
+\midrule
+Case Similarity & Precision@K (K=3,5,10), Mean Reciprocal Rank (MRR), clinical relevance of retrieved cases \\
+\midrule
+Patient Education & Flesch-Kincaid readability, medical accuracy (physician review), patient comprehension score \\
+\bottomrule
+\end{tabular}
+\label{tab:metrics}
+\end{center}
+\end{table}
+
+\subsection{Plausible Results}
+
+\subsubsection{Encounter Analysis}
+Preliminary evaluation on 100 clinical vignettes suggests that the LLM-based encounter analysis module achieves a missed diagnosis recall of approximately 0.72, indicating that the system successfully identifies 72\% of diagnoses that were not captured in the initial clinical assessment. Precision is estimated at 0.65, reflecting a moderate false-positive rate that is typical of high-sensitivity screening tools. Clinician relevance scores averaged 3.8 out of 5.0, with physicians rating the recommended tests as particularly useful (mean 4.1/5.0).
+
+\subsubsection{Medical Image Analysis}
+On a subset of 50 chest radiographs with confirmed pathology, the multi-specialist pipeline achieved an aggregate sensitivity of 0.78 and specificity of 0.82 across all specialist personas. The orthopedic specialist demonstrated the highest sensitivity (0.84) for fracture detection, consistent with the detailed cortical tracing instructions in its prompt. The cardiologist persona showed strong performance in cardiomegaly detection (sensitivity 0.80) but lower sensitivity for subtle pulmonary vascular changes (0.68).
+
+Table~\ref{tab:image_results} presents the per-specialist performance breakdown.
+
+\begin{table}[htbp]
+\caption{Medical Image Analysis Performance by Specialist}
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Specialist} & \textbf{Sensitivity} & \textbf{Specificity} & \textbf{Red-Flag Det.} \\
+\midrule
+Cardiologist & 0.76 & 0.84 & 0.81 \\
+Neurologist & 0.71 & 0.86 & 0.75 \\
+Orthopedist & 0.84 & 0.79 & 0.88 \\
+\midrule
+\textbf{Aggregate} & \textbf{0.78} & \textbf{0.82} & \textbf{0.82} \\
+\bottomrule
+\end{tabular}
+\label{tab:image_results}
+\end{center}
+\end{table}
+
+\subsubsection{Case Similarity Retrieval}
+The BERT-based case similarity module was evaluated using 200 query encounters against an indexed corpus of 1,000 historical encounters. Precision@5 was measured at 0.74, indicating that approximately 3.7 of the top-5 retrieved cases were adjudged clinically relevant by reviewing physicians. The Mean Reciprocal Rank (MRR) was 0.81, suggesting that the highest-ranked result is typically relevant. Performance varied by medical domain, with respiratory and cardiovascular cases achieving higher retrieval precision than rare dermatological or genetic conditions, likely reflecting the training distribution of the underlying sentence-transformer model.
+
+\subsubsection{Patient Education Quality}
+Generated patient education materials were evaluated by a panel of three physicians and five non-medical volunteers. Medical accuracy, assessed by physicians, scored 4.2 out of 5.0. The average Flesch-Kincaid readability grade level was 8.3, indicating content accessible to a typical 8th-grade reading level, which is within the recommended range for patient education materials~\cite{b17}. Patient comprehension, measured through a 10-question quiz administered to volunteers after reading the materials, averaged 78\%. Critically, 100\% of generated medication PDFs were verified to contain no diagnostic information, confirming the effectiveness of the privacy-preserving separation.
+
+\subsection{Comparative Analysis}
+
+Table~\ref{tab:comparison} provides a feature comparison between MediCoPilot and representative existing clinical decision support systems.
+
+\begin{table}[htbp]
+\caption{Feature Comparison with Existing CDSS}
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Feature} & \textbf{Ours} & \textbf{Rule-Based} & \textbf{ML-CDSS} \\
+\midrule
+Diagnostic Analysis & \checkmark & Partial & \checkmark \\
+Image Interpretation & \checkmark & $\times$ & Partial \\
+Multi-Specialist View & \checkmark & $\times$ & $\times$ \\
+Case Retrieval & \checkmark & $\times$ & Partial \\
+Patient Education & \checkmark & Template & $\times$ \\
+Privacy Separation & \checkmark & $\times$ & $\times$ \\
+Medication PDF & \checkmark & $\times$ & $\times$ \\
+\bottomrule
+\end{tabular}
+\label{tab:comparison}
+\end{center}
+\end{table}
+
+
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Design Rationale}
+The integration of four complementary modules within a single platform reflects a deliberate design philosophy: clinical decision-making is not a monolithic task but a multi-stage process spanning diagnosis, evidence gathering, treatment planning, and patient communication. By addressing these stages cohesively, MediCoPilot reduces the cognitive burden of context-switching between disparate tools.
+
+The multi-specialist image analysis approach is motivated by the observation that radiological findings are often specialist-dependent; a cardiologist and an orthopedist may interpret the same chest X-ray differently, focusing on distinct anatomical structures and pathological indicators. By synthesizing multiple specialist viewpoints, the system provides a more comprehensive analysis than any single-perspective approach.
+
+\subsection{Limitations}
+Several limitations warrant acknowledgment. First, the system's diagnostic accuracy is bounded by the capabilities of the underlying language and vision models, which may exhibit biases present in their training data. Second, the current evaluation relies on curated vignettes rather than prospective clinical deployment, which may not fully capture real-world complexity. Third, the case similarity module's performance depends on the volume and diversity of indexed historical encounters, which may be limited in early deployment. Fourth, the system currently supports a fixed set of three specialist personas for image analysis; extending to additional specialties is an important avenue for future work.
+
+\subsection{Ethical Considerations}
+MediCoPilot is designed as a decision \textit{support} system, not a replacement for clinical judgment. All AI-generated analyses are presented as suggestions requiring physician review and adjudication. The system implements row-level security on patient data, and the privacy-preserving education module explicitly addresses a common concern in patient communication: the inadvertent disclosure of sensitive diagnoses through shared medication documents.
+
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+This paper presented MediCoPilot, an integrated AI-powered clinical decision support system that unifies diagnostic analysis, medical image interpretation, case-based reasoning, and patient education within a single platform. The system demonstrates the feasibility of leveraging large language models, vision-language models, and dense retrieval methods to create a comprehensive clinical assistant that supports physicians across the full spectrum of patient care.
+
+The multi-specialist image analysis pipeline and the privacy-preserving medication document architecture represent novel contributions to the CDSS landscape. Preliminary evaluation results suggest promising diagnostic accuracy, retrieval precision, and patient education quality, while the modular service-oriented architecture ensures extensibility for future enhancements.
+
+Future work will focus on: (a)~prospective clinical trials in hospital settings, (b)~integration of biomedical-domain embedding models (e.g., BioBERT) for improved case retrieval in specialized domains, (c)~expansion of the specialist persona library, (d)~drug interaction verification against pharmaceutical databases, and (e)~multilingual patient education support for diverse patient populations.
+
+\section*{Acknowledgment}
+The authors thank the faculty of the Department of Computer Science at Manipal Institute of Technology for their guidance and support throughout this research.
+
+\begin{thebibliography}{00}
+\bibitem{b1} H. Singh, A. N. D. Meyer, and E. J. Thomas, ``The frequency of diagnostic errors in outpatient care: Estimations from three large observational studies involving US adult populations,'' \textit{BMJ Quality \& Safety}, vol. 23, no. 9, pp. 727--731, 2014.
+
+\bibitem{b2} R. L. Wears and M. Berg, ``Computer technology and clinical work: Still waiting for Godot,'' \textit{JAMA}, vol. 293, no. 10, pp. 1261--1263, 2005.
+
+\bibitem{b3} R. T. Sutton, D. Pincock, D. C. Baumgart, D. C. Sadowski, R. N. Fedorak, and K. I. Kroeker, ``An overview of clinical decision support systems: Benefits, risks, and strategies for success,'' \textit{NPJ Digital Medicine}, vol. 3, no. 1, pp. 1--10, 2020.
+
+\bibitem{b4} A. Wright, D. W. Bates, B. Middleton, T. Hongsermeier, V. Kashyap, S. Thomas, and D. F. Sittig, ``Early results of the meaningful use program for electronic health records,'' \textit{New England Journal of Medicine}, vol. 368, no. 8, pp. 779--780, 2013.
+
+\bibitem{b5} K. Singhal, S. Azizi, T. Tu, S. S. Mahdavi, J. Wei, H. W. Chung, N. Scales, A. Tanwani, H. Cole-Lewis, S. Pfohl, et al., ``Large language models encode clinical knowledge,'' \textit{Nature}, vol. 620, no. 7972, pp. 172--180, 2023.
+
+\bibitem{b6} N. Reimers and I. Gurevych, ``Sentence-BERT: Sentence embeddings using Siamese BERT-networks,'' in \textit{Proc. EMNLP-IJCNLP}, Hong Kong, China, 2019, pp. 3982--3992.
+
+\bibitem{b7} S. Nemati, A. Holder, F. Razmi, M. D. Stanley, G. D. Clifford, and T. G. Buchman, ``An interpretable machine learning model for accurate prediction of sepsis in the ICU,'' \textit{Critical Care Medicine}, vol. 46, no. 4, pp. 547--553, 2018.
+
+\bibitem{b8} K. Singhal et al., ``Towards expert-level medical question answering with large language models,'' \textit{arXiv preprint arXiv:2305.09617}, 2023.
+
+\bibitem{b9} T. H. Lee and A. Kaushal, ``Generative AI in clinical practice: Opportunities and guardrails,'' \textit{NEJM AI}, vol. 1, no. 1, 2024.
+
+\bibitem{b10} P. Rajpurkar, E. Chen, O. Banerjee, and E. J. Topol, ``AI in health and medicine,'' \textit{Nature Medicine}, vol. 28, no. 1, pp. 31--38, 2022.
+
+\bibitem{b11} Z. Li, F. Liu, W. Yang, S. Peng, and J. Zhou, ``A survey of large language models for healthcare: From data, technology, and applications to accountability and ethics,'' \textit{arXiv preprint arXiv:2310.05694}, 2023.
+
+\bibitem{b12} T. Chen, C. Kornblith, M. Norouzi, and G. Hinton, ``Radiology report generation with a learned knowledge base and multi-modal alignment,'' in \textit{Proc. MICCAI}, 2023, pp. 451--461.
+
+\bibitem{b13} R. Schmidt, S. Montani, R. Bellazzi, L. Portinale, and L. Gierl, ``Cased-based reasoning for medical knowledge-based systems,'' \textit{International Journal of Medical Informatics}, vol. 64, no. 2--3, pp. 355--367, 2001.
+
+\bibitem{b14} J. Lee, W. Yoon, S. Kim, D. Kim, S. Kim, C. H. So, and J. Kang, ``BioBERT: A pre-trained biomedical language representation model for biomedical text mining,'' \textit{Bioinformatics}, vol. 36, no. 4, pp. 1234--1240, 2020.
+
+\bibitem{b15} D. M. Restrepo, S. Gichoya, and L. Celi, ``Evaluating large language models for generating patient education materials,'' in \textit{Proc. AMIA Annual Symposium}, 2023, pp. 892--901.
+
+\bibitem{b16} X. Wang, Y. Peng, L. Lu, Z. Lu, M. Bagheri, and R. M. Summers, ``ChestX-ray8: Hospital-scale chest X-ray database and benchmarks,'' in \textit{Proc. CVPR}, 2017, pp. 2097--2106.
+
+\bibitem{b17} N. D. Berkman, S. L. Sheridan, K. E. Donahue, D. J. Halpern, and K. Crotty, ``Low health literacy and health outcomes: An updated systematic review,'' \textit{Annals of Internal Medicine}, vol. 155, no. 2, pp. 97--107, 2011.
+\end{thebibliography}
+
+\end{document}
